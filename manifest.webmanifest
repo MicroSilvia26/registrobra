@@ -1,17 +1,17 @@
 {
-  "name": "RegistrObraApp - Registro de Obra",
+  "name": "RegistrObraApp - BQS",
   "short_name": "RegistrObraApp",
-  "description": "Registro de obra en campo para compensación ambiental. Funciona sin conexión.",
+  "description": "Registro de obra en campo para compensación ambiental (BQS). Funciona sin conexión y sincroniza.",
   "lang": "es-CO",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#faf8f3",
-  "theme_color": "#163a2c",
+  "background_color": "#f6f9fc",
+  "theme_color": "#0f2f52",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

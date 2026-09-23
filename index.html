@@ -7,7 +7,7 @@
 
 <!-- Instalación como app (Android "Agregar/Instalar" y iOS "Agregar a pantalla de inicio") -->
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#163a2c">
+<meta name="theme-color" content="#0f2f52">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="RegistrObraApp">
@@ -28,11 +28,19 @@
         <p>Compensación Ambiental &middot; Registro en campo</p>
       </div>
     </div>
-    <span class="status-pill" id="netPill"><span class="dot"></span> <span id="netTxt">Sin conexión · datos en este dispositivo</span></span>
+    <span class="status-pill" id="netPill"><span class="dot"></span> <span id="netTxt">Preparando…</span></span>
   </div>
   <div class="contract-strip">
     <span>Ejecutor: <b>BUSINESS AND QUALITY SERVICES S.A.S</b></span>
-    <span id="stripCount">0 registros guardados</span>
+    <span id="stripCount">0 registros</span>
+    <span class="admin-badge" id="adminBadge" style="display:none;">ADMINISTRADOR</span>
+  </div>
+  <div class="sync-bar">
+    <button type="button" class="btn btn-sm" id="btnSync">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+      Sincronizar ahora
+    </button>
+    <span id="syncDetail" style="font-size:12px;color:#d6e6f5;"></span>
   </div>
 </header>
 
@@ -99,15 +107,21 @@
           </div>
         </div>
         <div class="field">
-          <label>Nombre del predio <span class="req">*</span></label>
+          <label>Nombre del predio <span class="req">*</span> <span class="hint">si no está, elige "Otro" y escríbelo</span></label>
           <select id="f_predio" disabled></select>
-          <div class="err-msg">Selecciona el predio.</div>
+          <input type="text" id="f_predio_otro" placeholder="Escribe el nombre del predio" style="display:none;margin-top:8px;" maxlength="80">
+          <div class="err-msg">Selecciona o escribe el predio.</div>
         </div>
         <div class="field">
           <label>Acto administrativo <span class="hint">según el PDT</span></label>
           <input type="text" id="f_acto" class="auto" readonly placeholder="Se completa al elegir el predio">
           <select id="f_acto_select" style="display:none;"></select>
           <div class="err-msg">Selecciona el acto administrativo.</div>
+        </div>
+        <div class="field">
+          <label>Registrado por <span class="req">*</span> <span class="hint">nombre de quien registra</span></label>
+          <input type="text" id="f_registrado" placeholder="Nombre y apellido" maxlength="60" autocomplete="name">
+          <div class="err-msg">Escribe tu nombre.</div>
         </div>
         <div class="field">
           <label>Ejecutor</label>
@@ -191,6 +205,7 @@
       <input type="search" id="searchBox" placeholder="Buscar por COMP, predio, ítem…" style="flex:1;min-width:180px;">
       <select id="filterZona"><option value="">Todas las zonas</option></select>
       <select id="filterComp"><option value="">Todos los COMP</option></select>
+      <select id="filterMine"><option value="">De todos</option><option value="mios">Solo míos</option><option value="pend">Por subir</option></select>
     </div>
     <div class="rec-list" id="recList"></div>
   </section>
@@ -199,7 +214,7 @@
   <section class="view" id="view-maestro">
     <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Maestro COMP</h2>
     <div class="card">
-      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">Cada ID COMP con sus líneas del PDT y el avance acumulado según los registros guardados en este dispositivo (ejecutado vs cantidad contractual).</p>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">Cada ID COMP con sus líneas del PDT y el avance acumulado según los registros de todos los técnicos (ejecutado vs cantidad contractual).</p>
       <div class="kpi-row" id="maestroKpis"></div>
       <button type="button" class="btn btn-primary btn-sm" id="btnMaestroExcel">Descargar Excel MAESTRO COMP</button>
     </div>
@@ -216,11 +231,19 @@
   <section class="view" id="view-datos">
     <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Descargas y copia de seguridad</h2>
     <div class="card">
-      <h3>Cómo funciona el almacenamiento</h3>
+      <h3>Sincronización compartida</h3>
       <p style="font-size:13px;color:var(--ink-600);line-height:1.55;margin:0 0 8px;">
-        Este aplicativo no necesita internet: todos los registros, fotos y firmas se guardan directamente en la memoria de este navegador/dispositivo (IndexedDB). Si abres el archivo en otro equipo o borras los datos del navegador, esa información no estará disponible allí  por eso se recomienda exportar copias de seguridad.
+        Los registros se guardan primero en este celular (funciona sin señal) y, cuando hay internet, se suben solos a la hoja de Google compartida y las fotos a Google Drive. Así todos los técnicos ven los registros de todos en cualquier dispositivo.
       </p>
-      <p class="muted" id="storageInfo" style="margin:0;"></p>
+      <p style="font-size:13px;margin:0 0 8px;" id="syncInfo"></p>
+      <div id="apiBox" style="display:none;">
+        <div class="field" style="margin-bottom:8px;">
+          <label>Enlace de sincronización <span class="hint">lo entrega el administrador</span></label>
+          <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/…/exec">
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveApi">Guardar enlace</button>
+      </div>
+      <p class="muted" id="storageInfo" style="margin:8px 0 0;"></p>
     </div>
     <div class="card">
       <h3>Seleccionar registros</h3>
@@ -254,7 +277,7 @@
     </div>
     <div class="card">
       <h3>Copia de seguridad completa</h3>
-      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;">Archivo .json con todos los registros, fotos y firmas. Sirve para pasar la información a otro teléfono o restaurarla.</p>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;">Archivo .json con los registros y las fotos guardadas en este celular. Sirve como respaldo adicional.</p>
       <button class="btn btn-primary btn-sm" id="btnExportJson">Descargar copia (.json)</button>
     </div>
     <div class="card">
@@ -266,8 +289,21 @@
       </div>
     </div>
     <div class="card">
+      <h3>Administrador</h3>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;">Con la clave de administrador este dispositivo puede editar o eliminar cualquier registro. Los demás solo pueden modificar los que ellos mismos crearon.</p>
+      <div id="adminOff">
+        <div class="field" style="margin-bottom:8px;"><input type="password" id="adminKeyInput" placeholder="Clave de administrador" autocomplete="off"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnAdminOn">Activar modo administrador</button>
+      </div>
+      <div id="adminOn" style="display:none;">
+        <p class="config-ok" style="margin:0 0 8px;">Modo administrador activo en este dispositivo.</p>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnAdminOff">Salir del modo administrador</button>
+      </div>
+    </div>
+    <div class="card">
       <h3>Zona de riesgo</h3>
-      <button class="btn btn-danger btn-sm" id="btnWipe">Borrar todos los registros de este dispositivo</button>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;">Borra la copia guardada en este celular. Lo que ya está sincronizado sigue en la hoja compartida y vuelve a descargarse; lo que esté "por subir" se pierde.</p>
+      <button class="btn btn-danger btn-sm" id="btnWipe">Borrar datos de este dispositivo</button>
     </div>
   </section>
 
@@ -297,7 +333,7 @@
       </div>
       <p style="font-size:13.5px;line-height:1.55;margin:0 0 12px;">Les aparecerá el ícono de RegistrObraApp en el celular como cualquier otra app.</p>
       <div class="note"><b>Importante:</b> ábranla siempre desde ese ícono (no desde WhatsApp), y la primera vez háganlo con internet o datos activos para que quede guardada en el celular — después de esa primera vez ya funciona sin señal</div>
-      <p style="font-size:13px;color:var(--ink-600);line-height:1.55;margin:0;">Este aplicativo no necesita internet: todos los registros, fotos y firmas se guardan directamente en la memoria de este navegador/dispositivo (IndexedDB). Si abres el archivo en otro equipo o borras los datos del navegador, esa información no estará disponible allí  por eso se recomienda exportar copias de seguridad.</p>
+      <p style="font-size:13px;color:var(--ink-600);line-height:1.55;margin:0;">Este aplicativo no necesita internet para registrar: todos los registros, fotos y firmas se guardan primero en la memoria de este dispositivo y, cuando hay señal, se suben solos a la base compartida para que todos los vean. Si borras los datos del navegador antes de sincronizar, lo que estaba "por subir" se pierde.</p>
       <p class="muted" id="offlineReady" style="margin:12px 0 0;"></p>
     </div>
   </section>
@@ -305,7 +341,7 @@
 </main>
 
 <footer class="app-foot">
-  <b>RegistrObraApp</b> · Compensación Ambiental · Funciona 100% sin conexión · <span id="verTxt"></span>
+  <b>RegistrObraApp</b> · Compensación Ambiental · Funciona sin conexión y sincroniza con internet · <span id="verTxt"></span>
 </footer>
 
 <div class="modal-bg" id="modalBg">
@@ -329,6 +365,7 @@
 <script src="jspdf.umd.min.js"></script>
 <script src="jspdf.plugin.autotable.min.js"></script>
 <script src="jszip.min.js"></script>
+<script src="config.js"></script>
 <script src="logo-cenit.js"></script>
 <script src="pdt-data.js"></script>
 <script src="app.js"></script>
