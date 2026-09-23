@@ -1,13 +1,13 @@
 /* Service worker de RegistrObraApp: guarda la app en el teléfono para usarla sin internet.
    Al publicar una versión nueva, cambie CACHE_VERSION para que los teléfonos la actualicen. */
-const CACHE_VERSION = 'registrobra-v2.0.2';
+const CACHE_VERSION = 'registrobra-v2.1.0';
 const FILES = [
   './', './index.html', './styles.css', './app.js', './pdt-data.js', './logo-cenit.js', './manifest.webmanifest',
-  './libs/xlsx.full.min.js', './libs/jspdf.umd.min.js', './libs/jspdf.plugin.autotable.min.js', './libs/jszip.min.js',
-  './icons/icon-32.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'
+  './exceljs.min.js', './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js', './jszip.min.js',
+  './logo-bqs-header.png', './icon-32.png', './icon-180.png', './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE_VERSION).then(c => Promise.all(FILES.map(f => c.add(f).catch(() => console.warn('No se pudo guardar', f))))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));

@@ -2,7 +2,7 @@
    RegistrObraApp v2 — Registro de obra en campo (100% offline)
    Datos maestros: 10 PDT CENIT (ver pdt-data.js)
    ============================================================ */
-const APP_VERSION = '2.0.2';
+const APP_VERSION = '2.1.0';
 const NR = 'No registra en PDT';
 const NA = 'No aplica';
 const EJECUTOR = 'BUSINESS AND QUALITY SERVICES S.A.S';
@@ -548,7 +548,7 @@ $('modalBg').addEventListener('click', e => { if (e.target === $('modalBg')) clo
 $('modalEdit').addEventListener('click', () => { if (detailId) editRecord(detailId); });
 $('modalPdf').addEventListener('click', async () => {
   const r = STATE.registros.find(x => x.id === detailId); if (!r) return;
-  try { const doc = await buildPdf([r]); downloadBlob(doc.output('blob'), fileBase([r]) + '.pdf'); } catch (e) { console.error(e); toast('No se pudo generar el PDF', true); }
+  try { const doc = await buildPdf([r]); downloadBlob(doc.output('blob'), fileBase([r]) + '.pdf'); } catch (e) { failToast('el PDF', e); }
 });
 $('modalDelete').addEventListener('click', async () => {
   if (!detailId) return;
@@ -616,12 +616,12 @@ function renderMaestro() {
   if ($('btnMore')) $('btnMore').addEventListener('click', () => { maestroLimit += 30; renderMaestro(); });
 }
 ['compSearch', 'maestroZona', 'maestroSolo'].forEach(id => $(id).addEventListener(id === 'compSearch' ? 'input' : 'change', () => { maestroLimit = 30; renderMaestro(); }));
-$('btnMaestroExcel').addEventListener('click', () => {
+$('btnMaestroExcel').addEventListener('click', async () => {
   try {
-    const wb = buildMaestroWorkbook(STATE.registros, null);
-    XLSX.writeFile(wb, 'MAESTRO COMP ' + isoToDMA(todayIso()).replace(/\//g, '-') + '.xlsx');
+    const buf = await buildMaestroXlsx(STATE.registros, null);
+    await downloadBlob(new Blob([buf], { type: XLSX_MIME }), 'MAESTRO COMP ' + isoToDMA(todayIso()).replace(/\//g, '-') + '.xlsx');
     toast('Excel MAESTRO COMP descargado');
-  } catch (e) { console.error(e); toast('No se pudo generar el Excel', true); }
+  } catch (e) { failToast('el Excel', e); }
 });
 
 /* ============================================================
@@ -631,10 +631,46 @@ function recordFolder(r) {
   return [ROOT_FOLDER, safeName(proyLabel(r.proyecto).replace(' · ', ' - ')), safeName(r.comp === NA ? 'Sin ID COMP' : r.comp), safeName((r.fecha || 'sin-fecha') + '_' + (r.predio === NR ? 'Sin predio' : r.predio) + '_R' + r.id)].join('/');
 }
 function safeName(s) { return String(s || '').replace(/[\\/:*?"<>|#%\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'sin-nombre'; }
-function buildMaestroWorkbook(records, projectIds) {
-  const wb = XLSX.utils.book_new();
-  const title = 'MAESTRO COMP · Registro de obra en campo · Compensación Ambiental';
+/* Excel con ExcelJS (permite logos). Devuelve un ArrayBuffer .xlsx */
+async function buildMaestroXlsx(records, projectIds) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'RegistrObraApp · ' + EJECUTOR;
+  wb.created = new Date();
+  const imgBqs = wb.addImage({ base64: LOGO_BQS_BASE64, extension: 'png' });
+  const imgCenit = wb.addImage({ base64: LOGO_CENIT_BASE64, extension: 'png' });
   const sub = 'Generado: ' + isoToDMA(todayIso()) + ' · ' + records.length + ' registro(s) · Ejecutor: ' + EJECUTOR;
+  const GREEN = 'FF1F4D3A', CLAY = 'FFB5763F';
+
+  function sheet(name, title, cols, widths, rows, numFmt) {
+    const ws = wb.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 6 }] });
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    ws.getRow(1).height = 24; ws.getRow(2).height = 24; ws.getRow(3).height = 18; ws.getRow(4).height = 18;
+    // Logos: BQS a la izquierda, CENIT a la derecha del título
+    const bqsH = 54, bqsW = bqsH * LOGO_BQS_W / LOGO_BQS_H;
+    ws.addImage(imgBqs, { tl: { col: 0.1, row: 0.2 }, ext: { width: bqsW, height: bqsH } });
+    const cenH = 58, cenW = cenH * LOGO_CENIT_W / LOGO_CENIT_H;
+    ws.addImage(imgCenit, { tl: { col: Math.min(cols.length - 1, 6) + 0.1, row: 0.3 }, ext: { width: cenW, height: cenH } });
+    const tc = ws.getCell('C1'); tc.value = title; tc.font = { bold: true, size: 14, color: { argb: GREEN } };
+    const sc = ws.getCell('C2'); sc.value = sub; sc.font = { size: 10, color: { argb: 'FF6B4A2F' } };
+    const cc = ws.getCell('C3'); cc.value = 'BQS · Business & Quality Services SAS — Compensación Ambiental'; cc.font = { size: 9, italic: true, color: { argb: 'FF77827A' } };
+    const hr = ws.getRow(6);
+    hr.values = cols; hr.height = 30;
+    hr.eachCell(c => {
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREEN } };
+      c.alignment = { vertical: 'middle', wrapText: true };
+      c.border = { bottom: { style: 'medium', color: { argb: CLAY } } };
+    });
+    rows.forEach((r, i) => {
+      const row = ws.addRow(r);
+      row.alignment = { vertical: 'top', wrapText: true };
+      if (i % 2 === 1) row.eachCell({ includeEmpty: true }, c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F5F0' } }; });
+    });
+    (numFmt || []).forEach(ci => { ws.getColumn(ci).numFmt = '#,##0.##'; });
+    if (rows.length) ws.autoFilter = { from: { row: 6, column: 1 }, to: { row: 6 + rows.length, column: cols.length } };
+    return ws;
+  }
+
   // Hoja 1: registros (una fila por actividad, mismos campos del formulario)
   const cols1 = ['ID registro', 'Fecha (DD/MM/AA)', 'Proyecto', 'Zona', 'ODS', 'ID COMP', 'Acto administrativo', 'Departamento', 'Municipio', 'Nombre del predio', 'Ejecutor', 'Ítem', 'Descripción de la actividad', 'Unidad', 'Cantidad ejecutada', 'Cantidad contractual PDT', 'N° fotos', 'Firma', 'Observaciones', 'Carpeta en el paquete .zip'];
   const rows1 = [];
@@ -643,11 +679,7 @@ function buildMaestroWorkbook(records, projectIds) {
     its.forEach(it => rows1.push([r.id, isoToDMA(r.fecha), proyLabel(r.proyecto), r.zona, r.ods, r.comp, r.acto, r.departamento, r.municipio, r.predio, r.ejecutor,
       it.item || '', it.actividad || '', it.unidad || '', numOrBlank(it.cantidad), numOrBlank(it.contractual), (r.fotos || []).length, r.firma ? 'Sí' : 'No', r.observaciones || '', recordFolder(r)]));
   });
-  const ws1 = XLSX.utils.aoa_to_sheet([[title], [sub], [], cols1].concat(rows1));
-  ws1['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }];
-  ws1['!cols'] = [8, 11, 34, 18, 9, 12, 30, 16, 20, 24, 30, 7, 55, 13, 11, 11, 7, 6, 30, 60].map(w => ({ wch: w }));
-  ws1['!autofilter'] = { ref: 'A4:T' + (4 + rows1.length) };
-  XLSX.utils.book_append_sheet(wb, ws1, 'Registros');
+  sheet('Registros', 'MAESTRO COMP · Registros de obra en campo', cols1, [9, 11, 30, 16, 9, 12, 28, 15, 18, 22, 26, 7, 50, 12, 11, 12, 7, 6, 28, 55], rows1, [15, 16]);
 
   // Hoja 2: avance por línea del PDT
   const pids = projectIds || uniq(LINES.map(l => l.p));
@@ -663,10 +695,7 @@ function buildMaestroWorkbook(records, projectIds) {
     const e = ex[l.sig] || { q: 0, n: 0, last: '' };
     return [proyLabel(l.p), l.z, l.o, l.c, l.a, l.d, l.m, l.pr, l.i, l.ds, l.u, numOrBlank(l.q), e.q, l.q ? Math.round(e.q / l.q * 1000) / 10 : '', e.n, isoToDMA(e.last)];
   });
-  const ws2 = XLSX.utils.aoa_to_sheet([['MAESTRO COMP · Avance frente al PDT'], [sub], [], cols2].concat(rows2));
-  ws2['!cols'] = [34, 18, 9, 12, 30, 16, 20, 24, 7, 55, 13, 12, 12, 9, 10, 11].map(w => ({ wch: w }));
-  ws2['!autofilter'] = { ref: 'A4:P' + (4 + rows2.length) };
-  XLSX.utils.book_append_sheet(wb, ws2, 'Avance PDT');
+  sheet('Avance PDT', 'MAESTRO COMP · Avance frente al PDT', cols2, [30, 16, 9, 12, 28, 15, 18, 22, 7, 50, 12, 12, 12, 9, 10, 11], rows2, [12, 13]);
 
   // Hoja 3: resumen por COMP
   const cols3 = ['Proyecto', 'Zona', 'ODS', 'ID COMP', 'Líneas PDT', 'Líneas con avance', 'N° registros', 'Último registro'];
@@ -674,11 +703,10 @@ function buildMaestroWorkbook(records, projectIds) {
     const regs = records.filter(r => r.proyecto === g.p && r.zona === g.z && r.ods === g.o && r.comp === g.c);
     return [proyLabel(g.p), g.z, g.o, g.c, g.lines.length, g.lines.filter(l => ex[l.sig]).length, regs.length, isoToDMA(regs.map(r => r.fecha || '').sort().pop() || '')];
   });
-  const ws3 = XLSX.utils.aoa_to_sheet([['MAESTRO COMP · Resumen por ID COMP'], [sub], [], cols3].concat(rows3));
-  ws3['!cols'] = [34, 18, 9, 12, 10, 12, 11, 12].map(w => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, ws3, 'Resumen por COMP');
-  return wb;
+  sheet('Resumen por COMP', 'MAESTRO COMP · Resumen por ID COMP', cols3, [30, 18, 9, 14, 12, 14, 12, 13], rows3);
+  return await wb.xlsx.writeBuffer();
 }
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 function numOrBlank(v) { return v === null || v === undefined || v === '' || isNaN(v) ? '' : Number(v); }
 
 /* ============================================================
@@ -709,17 +737,20 @@ async function buildPdf(records) {
     const r = list[idx];
     if (idx > 0) doc.addPage();
     let y = 46;
-    const lw = 62, lh = lw * (LOGO_CENIT_H / LOGO_CENIT_W);
-    try { doc.addImage(LOGO_CENIT_BASE64, 'PNG', mx, 40, lw, lh); } catch (e) { }
+    const bw = 104, bh = bw * (LOGO_BQS_H / LOGO_BQS_W);
+    const lw = 56, lh = lw * (LOGO_CENIT_H / LOGO_CENIT_W);
+    try { doc.addImage(LOGO_BQS_BASE64, 'PNG', mx, 36, bw, bh); } catch (e) { }
+    try { doc.addImage(LOGO_CENIT_BASE64, 'PNG', mx + bw + 12, 36 + (bh - lh) / 2, lw, lh); } catch (e) { }
+    const logosW = bw + 12 + lw;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(31, 77, 58);
     doc.text('Informe de Registro de Obra', pageW - mx, y, { align: 'right' }); y += 15;
     doc.setFontSize(10.5); doc.setTextColor(181, 118, 63);
-    doc.text('ID COMP: ' + (r.comp || '-') + ' · Predio: ' + (r.predio || '-'), pageW - mx, y, { align: 'right', maxWidth: cw - lw - 10 }); y += 14;
+    doc.text('ID COMP: ' + (r.comp || '-') + ' · Predio: ' + (r.predio || '-'), pageW - mx, y, { align: 'right', maxWidth: cw - logosW - 14 }); y += 14;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(107, 74, 47);
     doc.text(proyLabel(r.proyecto), pageW - mx, y, { align: 'right' }); y += 13;
     doc.setFontSize(8.5); doc.setTextColor(120, 120, 120);
     doc.text((r.zona || '-') + ' · ' + (r.ods || '-') + ' · ' + (isoToDMA(r.fecha) || '-'), pageW - mx, y, { align: 'right' });
-    y = Math.max(y + 10, 40 + lh + 8);
+    y = Math.max(y + 10, 36 + bh + 8);
     doc.setDrawColor(217, 207, 186); doc.line(mx, y, pageW - mx, y); y += 22;
 
     y = pdfSection(doc, '1. Datos generales', mx, y);
@@ -790,7 +821,7 @@ function buildWordHtml(records) {
     }
     const firma = r.firma ? '<img src="' + r.firma + '" width="200" style="max-width:220px;border:1px solid #d9cfba;padding:4px;"><div style="font-size:9px;color:#4a564e;">' + escapeHtml(r.ejecutor || EJECUTOR) + '</div>' : '<p style="font-size:9.5px;color:#77827a;">Sin firma registrada.</p>';
     return (idx ? '<div style="page-break-before:always;">&nbsp;</div>' : '') +
-      '<table style="width:100%;"><tr><td style="width:80px;"><img src="' + LOGO_CENIT_BASE64 + '" width="70"></td><td style="text-align:right;">' +
+      '<table style="width:100%;"><tr><td style="width:190px;vertical-align:middle;"><img src="' + LOGO_BQS_BASE64 + '" width="110"> &nbsp; <img src="' + LOGO_CENIT_BASE64 + '" width="60"></td><td style="text-align:right;">' +
       '<div style="font-size:16px;font-weight:bold;color:#1f4d3a;">Informe de Registro de Obra</div>' +
       '<div style="font-size:11px;font-weight:bold;color:#b5763f;">ID COMP: ' + escapeHtml(r.comp) + ' · Predio: ' + escapeHtml(r.predio) + '</div>' +
       '<div style="font-size:10px;color:#6b4a2f;">' + escapeHtml(proyLabel(r.proyecto)) + '</div>' +
@@ -801,6 +832,13 @@ function buildWordHtml(records) {
       sec('3. Registro fotográfico') + fotos + sec('4. Firma') + firma;
   }).join('');
   return '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Informe de registros de obra</title><style>body{font-family:Calibri,Arial,sans-serif;color:#1c2420;}table{border-collapse:collapse;}</style></head><body>' + blocks + '</body></html>';
+}
+
+function failToast(what, e) {
+  console.error(e);
+  const libs = { ExcelJS: 'exceljs.min.js', jspdf: 'jspdf.umd.min.js', JSZip: 'jszip.min.js' };
+  const falt = Object.keys(libs).filter(k => !window[k]).map(k => libs[k]);
+  toast(falt.length ? 'No se pudo generar ' + what + ': falta subir ' + falt.join(', ') + ' junto al index.html' : 'No se pudo generar ' + what + ' (' + (e && e.message ? e.message : 'error') + ')', true);
 }
 
 /* ============================================================
@@ -865,12 +903,12 @@ async function buildZip(sel, withReports) {
   if (withReports) {
     msg.textContent = 'Generando Excel MAESTRO COMP…';
     const pids = uniq(sel.map(r => r.proyecto));
-    zip.file(ROOT_FOLDER + '/MAESTRO COMP.xlsx', XLSX.write(buildMaestroWorkbook(sel, pids), { type: 'array', bookType: 'xlsx' }));
-    pids.forEach(pid => {
+    zip.file(ROOT_FOLDER + '/MAESTRO COMP.xlsx', await buildMaestroXlsx(sel, pids));
+    for (const pid of pids) {
       const recs = sel.filter(r => r.proyecto === pid);
       const pf = safeName(proyLabel(pid).replace(' · ', ' - '));
-      zip.file(ROOT_FOLDER + '/' + pf + '/MAESTRO COMP - ' + pf + '.xlsx', XLSX.write(buildMaestroWorkbook(recs, [pid]), { type: 'array', bookType: 'xlsx' }));
-    });
+      zip.file(ROOT_FOLDER + '/' + pf + '/MAESTRO COMP - ' + pf + '.xlsx', await buildMaestroXlsx(recs, [pid]));
+    }
   }
   msg.textContent = 'Comprimiendo…';
   const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
@@ -881,30 +919,30 @@ $('btnZip').addEventListener('click', async () => {
   const sel = needSelection(); if (!sel.length) return;
   const b = $('btnZip'); b.disabled = true;
   try { const blob = await buildZip(sel, $('zipPdf').checked); await downloadBlob(blob, safeName(ROOT_FOLDER + ' ' + isoToDMA(todayIso()).replace(/\//g, '-')) + '.zip'); toast('Paquete .zip descargado'); }
-  catch (e) { console.error(e); toast('No se pudo generar el .zip', true); $('zipMsg').textContent = ''; }
+  catch (e) { failToast('el .zip', e); $('zipMsg').textContent = ''; }
   finally { b.disabled = false; }
 });
 $('btnExportFotos').addEventListener('click', async () => {
   const sel = needSelection(); if (!sel.length) return;
   try { const blob = await buildZip(sel, false); await downloadBlob(blob, safeName('Fotos y firmas ' + isoToDMA(todayIso()).replace(/\//g, '-')) + '.zip'); toast('Fotos descargadas'); }
-  catch (e) { console.error(e); toast('No se pudieron descargar las fotos', true); }
+  catch (e) { failToast('el .zip de fotos', e); }
 });
-$('btnExportExcel').addEventListener('click', () => {
+$('btnExportExcel').addEventListener('click', async () => {
   const sel = needSelection(); if (!sel.length) return;
-  try { XLSX.writeFile(buildMaestroWorkbook(sel, uniq(sel.map(r => r.proyecto))), 'MAESTRO COMP ' + isoToDMA(todayIso()).replace(/\//g, '-') + '.xlsx'); toast('Excel descargado'); }
-  catch (e) { console.error(e); toast('No se pudo generar el Excel', true); }
+  try { const buf = await buildMaestroXlsx(sel, uniq(sel.map(r => r.proyecto))); await downloadBlob(new Blob([buf], { type: XLSX_MIME }), 'MAESTRO COMP ' + isoToDMA(todayIso()).replace(/\//g, '-') + '.xlsx'); toast('Excel descargado'); }
+  catch (e) { failToast('el Excel', e); }
 });
 $('btnExportPdf').addEventListener('click', async () => {
   const sel = needSelection(); if (!sel.length) return;
   const b = $('btnExportPdf'), t = b.textContent; b.disabled = true; b.textContent = 'Generando PDF…';
   try { const doc = await buildPdf(sel); await downloadBlob(doc.output('blob'), fileBase(sel) + '.pdf'); toast('PDF descargado'); }
-  catch (e) { console.error(e); toast('No se pudo generar el PDF', true); }
+  catch (e) { failToast('el PDF', e); }
   finally { b.disabled = false; b.textContent = t; }
 });
 $('btnExportWord').addEventListener('click', async () => {
   const sel = needSelection(); if (!sel.length) return;
   try { await downloadBlob(new Blob(['﻿' + buildWordHtml(sel)], { type: 'application/msword' }), fileBase(sel) + '.doc'); toast('Word descargado'); }
-  catch (e) { console.error(e); toast('No se pudo generar el Word', true); }
+  catch (e) { failToast('el Word', e); }
 });
 $('btnExportJson').addEventListener('click', async () => {
   const data = { app: 'RegistrObraApp', version: APP_VERSION, exportado: new Date().toISOString(), registros: STATE.registros };

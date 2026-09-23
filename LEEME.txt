@@ -1,14 +1,18 @@
 RegistrObraApp v2 — Registro de obra en campo (funciona sin internet)
 =====================================================================
 
-CONTENIDO DE LA CARPETA
+CONTENIDO (todos los archivos van sueltos, en el mismo nivel, SIN subcarpetas)
   index.html            Página principal de la app
   app.js                Lógica de la app
   pdt-data.js           Listas desplegables extraídas de los 10 PDT (1.845 líneas)
   styles.css            Diseño
-  sw.js                 Service worker: guarda la app en el celular para usarla sin señal
+  sw.js                 Guarda la app en el celular para usarla sin señal
   manifest.webmanifest  Datos para instalarla como ícono en el celular
-  logo-cenit.js, icons/ y libs/  Logo, íconos y librerías (Excel, PDF, ZIP), todo local
+  logo-cenit.js         Logos de BQS y CENIT para los informes
+  logo-bqs-header.png   Logo de BQS en la app
+  icon-*.png            Íconos de la app
+  exceljs.min.js, jspdf.umd.min.js, jspdf.plugin.autotable.min.js, jszip.min.js
+                        Herramientas para generar Excel, PDF y .zip (sin internet)
 
 CÓMO PUBLICARLA
   1. Suban TODA la carpeta (con sus subcarpetas) a un sitio web con https,
@@ -20,7 +24,7 @@ CÓMO PUBLICARLA
 
 AL ACTUALIZAR LA APP
   Si cambian cualquier archivo (por ejemplo un PDT nuevo en pdt-data.js), cambien también
-  el texto CACHE_VERSION de la primera línea de sw.js (ej. registrobra-v2.0.3) para que
+  el texto CACHE_VERSION de la primera línea de sw.js (ej. registrobra-v2.1.1) para que
   los celulares descarguen la versión nueva la próxima vez que tengan internet.
 
 DÓNDE QUEDAN LOS DATOS
