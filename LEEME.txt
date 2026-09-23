@@ -1,0 +1,32 @@
+RegistrObraApp v2 — Registro de obra en campo (funciona sin internet)
+=====================================================================
+
+CONTENIDO DE LA CARPETA
+  index.html            Página principal de la app
+  app.js                Lógica de la app
+  pdt-data.js           Listas desplegables extraídas de los 10 PDT (1.845 líneas)
+  styles.css            Diseño
+  sw.js                 Service worker: guarda la app en el celular para usarla sin señal
+  manifest.webmanifest  Datos para instalarla como ícono en el celular
+  logo-cenit.js, icons/ y libs/  Logo, íconos y librerías (Excel, PDF, ZIP), todo local
+
+CÓMO PUBLICARLA
+  1. Suban TODA la carpeta (con sus subcarpetas) a un sitio web con https,
+     por ejemplo a GitHub Pages (reemplazando los archivos del repositorio actual).
+  2. Compartan el enlace del index.html con los técnicos.
+  3. Cada técnico la abre una vez con internet y la instala desde la pestaña "Instalar app".
+  Nota: si se abre haciendo doble clic en index.html (sin publicarla), la app funciona,
+  pero no se puede instalar ni garantizar el modo sin señal.
+
+AL ACTUALIZAR LA APP
+  Si cambian cualquier archivo (por ejemplo un PDT nuevo en pdt-data.js), cambien también
+  el texto CACHE_VERSION de la primera línea de sw.js (ej. registrobra-v2.0.3) para que
+  los celulares descarguen la versión nueva la próxima vez que tengan internet.
+
+DÓNDE QUEDAN LOS DATOS
+  Los registros, fotos y firmas se guardan en el celular (IndexedDB). Nada se envía a
+  internet. Desde "Descargas y copia" se descargan:
+   - Paquete .zip: REGISTROS EN CAMPO / Proyecto / ID COMP / AAAA-MM-DD_Predio_R# /
+     (fotos, firma e informe PDF) + Excel MAESTRO COMP en la raíz y en cada proyecto.
+   - Excel MAESTRO COMP, informe PDF, informe Word, solo fotos y firmas, copia .json.
+  La copia .json sirve para pasar los registros a otro teléfono (Restaurar / importar).

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>RegistrObraApp</title>
+
+<!-- Instalación como app (Android "Agregar/Instalar" y iOS "Agregar a pantalla de inicio") -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#163a2c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RegistrObraApp">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-head">
+  <div class="head-row">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 48 48" fill="none">
+        <path d="M24 4C24 4 10 16 10 28C10 36.3 16.3 42 24 42C31.7 42 38 36.3 38 28C38 16 24 4 24 4Z" fill="#7be3a4" opacity="0.9"/>
+        <path d="M24 42V22M24 22L16 15M24 26L32 19" stroke="#163a2c" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <h1>RegistrObraApp</h1>
+        <p>Compensación Ambiental &middot; Registro en campo</p>
+      </div>
+    </div>
+    <span class="status-pill" id="netPill"><span class="dot"></span> <span id="netTxt">Sin conexión · datos en este dispositivo</span></span>
+  </div>
+  <div class="contract-strip">
+    <span>Ejecutor: <b>BUSINESS AND QUALITY SERVICES S.A.S</b></span>
+    <span id="stripCount">0 registros guardados</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabsNav">
+  <button data-tab="nuevo" class="active">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    Nuevo registro
+  </button>
+  <button data-tab="registros">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    Registros <span class="count" id="tabCount">0</span>
+  </button>
+  <button data-tab="maestro">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13z"/><path d="M6.5 17H20v3H6.5A2.5 2.5 0 0 1 4 17.5"/></svg>
+    Maestro COMP
+  </button>
+  <button data-tab="datos">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+    Descargas y copia
+  </button>
+  <button data-tab="instalar">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+    Instalar app
+  </button>
+</nav>
+
+<main>
+
+  <!-- ===================== NUEVO REGISTRO ===================== -->
+  <section class="view active" id="view-nuevo">
+    <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> <span id="formTitle">Nuevo registro de obra</span></h2>
+
+    <form id="regForm" novalidate autocomplete="off">
+      <div class="card">
+        <h3>Identificación</h3>
+        <div class="proj-strip" id="projStrip">Proyecto: <b>elige una zona</b></div>
+        <div class="row2">
+          <div class="field">
+            <label>Zona <span class="req">*</span></label>
+            <select id="f_zona"></select>
+            <div class="err-msg">Selecciona la zona.</div>
+          </div>
+          <div class="field">
+            <label>ODS <span class="req">*</span></label>
+            <select id="f_ods" disabled></select>
+            <div class="err-msg">Selecciona el ODS.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>ID COMP <span class="req">*</span></label>
+          <select id="f_comp" disabled></select>
+          <div class="err-msg">Selecciona el ID COMP.</div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Departamento <span class="req">*</span></label>
+            <select id="f_departamento" disabled></select>
+            <div class="err-msg">Selecciona el departamento.</div>
+          </div>
+          <div class="field">
+            <label>Municipio <span class="req">*</span></label>
+            <select id="f_municipio" disabled></select>
+            <div class="err-msg">Selecciona el municipio.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Nombre del predio <span class="req">*</span></label>
+          <select id="f_predio" disabled></select>
+          <div class="err-msg">Selecciona el predio.</div>
+        </div>
+        <div class="field">
+          <label>Acto administrativo <span class="hint">según el PDT</span></label>
+          <input type="text" id="f_acto" class="auto" readonly placeholder="Se completa al elegir el predio">
+          <select id="f_acto_select" style="display:none;"></select>
+          <div class="err-msg">Selecciona el acto administrativo.</div>
+        </div>
+        <div class="field">
+          <label>Ejecutor</label>
+          <select id="f_ejecutor"><option>BUSINESS AND QUALITY SERVICES S.A.S</option></select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Fecha <span class="req">*</span> <span class="hint">DD/MM/AA</span></label>
+          <div class="date-wrap">
+            <input type="text" id="f_fecha" inputmode="numeric" placeholder="DD/MM/AA" maxlength="8">
+            <button type="button" class="btn btn-ghost" id="btnCal" aria-label="Abrir calendario">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+            </button>
+            <input type="date" id="f_fecha_cal" class="date-hidden" tabindex="-1" aria-hidden="true">
+          </div>
+          <div class="err-msg">Escribe una fecha válida en formato DD/MM/AA.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Actividades ejecutadas</h3>
+        <p style="font-size:12px;color:var(--ink-600);margin:-4px 0 12px;">Elige el ÍTEM trabajado (solo aparecen los programados en el PDT para el COMP y predio seleccionados) y digita la cantidad ejecutada.</p>
+        <div id="itemsContainer"></div>
+        <button type="button" class="btn btn-clay btn-sm" id="btnAddRow">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          Agregar actividad
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="field" style="margin-bottom:0;">
+          <label>Observaciones <span class="hint">opcional</span></label>
+          <textarea id="f_obs" placeholder="Notas de campo, novedades, condiciones del sitio…"></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Registro fotográfico <span class="req">*</span></h3>
+        <p style="font-size:12px;color:var(--ink-600);margin:-4px 0 12px;">Debes cargar mínimo 4 fotos por cada actividad reportada. Puedes elegirlas de la galería del teléfono o tomarlas con la cámara.</p>
+        <div class="btn-row" style="margin-top:0;">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 17l-5-5-9 7"/></svg>
+            Cargar desde la galería
+            <input type="file" id="f_foto_archivo" accept="image/*" multiple style="display:none;">
+          </label>
+        </div>
+        <div class="photo-grid" id="photoGrid"></div>
+        <div class="err-msg" id="fotoErr" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <h3>Firma <span class="req">*</span></h3>
+        <div class="sig-wrap" id="sigWrap">
+          <div id="firmaPreview" class="sig-empty-hint" style="position:static;display:flex;height:150px;">Aún no has cargado una firma.</div>
+        </div>
+        <div class="btn-row">
+          <label class="btn btn-clay btn-sm" style="cursor:pointer;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            Cargar firma desde la galería
+            <input type="file" id="f_firma_archivo" accept="image/*" style="display:none;">
+          </label>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnClearSig">Quitar firma</button>
+        </div>
+        <div class="err-msg" id="firmaErr" style="display:none;">Debes cargar una imagen de firma.</div>
+      </div>
+
+      <div class="btn-row" style="margin-bottom:30px;">
+        <button type="submit" class="btn btn-primary" id="btnSubmit">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12l5 5L20 7"/></svg>
+          Guardar registro
+        </button>
+        <button type="button" class="btn btn-ghost" id="btnReset">Limpiar formulario</button>
+        <button type="button" class="btn btn-danger" id="btnCancelEdit" style="display:none;">Cancelar edición</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ===================== REGISTROS ===================== -->
+  <section class="view" id="view-registros">
+    <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Registros guardados</h2>
+    <div class="toolbar">
+      <input type="search" id="searchBox" placeholder="Buscar por COMP, predio, ítem…" style="flex:1;min-width:180px;">
+      <select id="filterZona"><option value="">Todas las zonas</option></select>
+      <select id="filterComp"><option value="">Todos los COMP</option></select>
+    </div>
+    <div class="rec-list" id="recList"></div>
+  </section>
+
+  <!-- ===================== MAESTRO COMP ===================== -->
+  <section class="view" id="view-maestro">
+    <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Maestro COMP</h2>
+    <div class="card">
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">Cada ID COMP con sus líneas del PDT y el avance acumulado según los registros guardados en este dispositivo (ejecutado vs cantidad contractual).</p>
+      <div class="kpi-row" id="maestroKpis"></div>
+      <button type="button" class="btn btn-primary btn-sm" id="btnMaestroExcel">Descargar Excel MAESTRO COMP</button>
+    </div>
+    <div class="toolbar">
+      <input type="search" id="compSearch" placeholder="Buscar ID COMP, municipio, predio…" style="flex:1;min-width:160px;">
+      <select id="maestroZona"><option value="">Todas las zonas</option></select>
+      <select id="maestroSolo"><option value="">Todos los COMP</option><option value="con">Solo con registros</option></select>
+    </div>
+    <div id="compMasterList"></div>
+    <div id="compMore" style="text-align:center;margin-top:10px;"></div>
+  </section>
+
+  <!-- ===================== DESCARGAS / COPIA ===================== -->
+  <section class="view" id="view-datos">
+    <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Descargas y copia de seguridad</h2>
+    <div class="card">
+      <h3>Cómo funciona el almacenamiento</h3>
+      <p style="font-size:13px;color:var(--ink-600);line-height:1.55;margin:0 0 8px;">
+        Este aplicativo no necesita internet: todos los registros, fotos y firmas se guardan directamente en la memoria de este navegador/dispositivo (IndexedDB). Si abres el archivo en otro equipo o borras los datos del navegador, esa información no estará disponible allí  por eso se recomienda exportar copias de seguridad.
+      </p>
+      <p class="muted" id="storageInfo" style="margin:0;"></p>
+    </div>
+    <div class="card">
+      <h3>Seleccionar registros</h3>
+      <div class="toolbar" style="margin-bottom:10px;">
+        <select id="expZona"><option value="">Todas las zonas</option></select>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAll">Seleccionar todos</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnSelectNone">Ninguno</button>
+      </div>
+      <div id="exportSelectorList" class="master-list" style="max-height:300px;overflow-y:auto;"></div>
+    </div>
+    <div class="card">
+      <h3>Paquete completo (.zip)</h3>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">
+        Descarga los registros marcados con sus fotos, firmas e informe PDF, organizados en carpetas:<br>
+        <code style="font-size:11.5px;">REGISTROS EN CAMPO / Proyecto / ID COMP / Fecha_Predio / …</code><br>
+        Incluye el Excel MAESTRO COMP en la raíz y en cada carpeta de proyecto.
+      </p>
+      <label class="sel-row" style="margin-bottom:10px;"><input type="checkbox" id="zipPdf" checked> Incluir informe PDF de cada registro</label>
+      <button class="btn btn-primary btn-sm" id="btnZip">Descargar paquete .zip</button>
+      <div class="progress-msg" id="zipMsg"></div>
+    </div>
+    <div class="card">
+      <h3>Otros formatos</h3>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;">Con los registros marcados arriba.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="btnExportExcel">Excel MAESTRO COMP (.xlsx)</button>
+        <button class="btn btn-clay btn-sm" id="btnExportPdf">Informe PDF</button>
+        <button class="btn btn-ghost btn-sm" id="btnExportWord">Informe Word (.doc)</button>
+        <button class="btn btn-ghost btn-sm" id="btnExportFotos">Solo fotos y firmas (.zip)</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Copia de seguridad completa</h3>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;">Archivo .json con todos los registros, fotos y firmas. Sirve para pasar la información a otro teléfono o restaurarla.</p>
+      <button class="btn btn-primary btn-sm" id="btnExportJson">Descargar copia (.json)</button>
+    </div>
+    <div class="card">
+      <h3>Restaurar / importar copia</h3>
+      <input type="file" id="importFile" accept="application/json,.json" style="margin-bottom:10px;display:block;">
+      <div class="btn-row">
+        <button class="btn btn-clay btn-sm" id="btnImportMerge">Combinar con datos actuales</button>
+        <button class="btn btn-danger btn-sm" id="btnImportReplace">Reemplazar todo</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Zona de riesgo</h3>
+      <button class="btn btn-danger btn-sm" id="btnWipe">Borrar todos los registros de este dispositivo</button>
+    </div>
+  </section>
+
+  <!-- ===================== INSTALAR ===================== -->
+  <section class="view" id="view-instalar">
+    <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Instalar en el celular</h2>
+    <div class="card">
+      <p style="font-size:13.5px;line-height:1.55;margin:0 0 12px;">Para que les quede como un ícono en la pantalla de inicio del celular (y puedan usarla sin internet en campo), sigan estos pasos según su teléfono:</p>
+      <div class="install-box">
+        <h4>Si tienen Android (Chrome):</h4>
+        <ol class="install-steps">
+          <li>Abran el enlace en Chrome</li>
+          <li>Toquen los tres puntos (⋮) arriba a la derecha</li>
+          <li>Elijan "Agregar a pantalla de inicio" o "Instalar aplicación"</li>
+          <li>Confirmen y listo</li>
+        </ol>
+        <button type="button" class="btn btn-primary btn-sm" id="btnInstall" style="display:none;margin-top:10px;">Instalar ahora</button>
+      </div>
+      <div class="install-box">
+        <h4>iPhone (Safari):</h4>
+        <ol class="install-steps">
+          <li>Abran el enlace en Safari</li>
+          <li>Toquen el botón de compartir (el cuadrito con la flecha hacia arriba)</li>
+          <li>Bajen y elijan "Agregar a pantalla de inicio"</li>
+          <li>Toquen "Agregar" y listo</li>
+        </ol>
+      </div>
+      <p style="font-size:13.5px;line-height:1.55;margin:0 0 12px;">Les aparecerá el ícono de RegistrObraApp en el celular como cualquier otra app.</p>
+      <div class="note"><b>Importante:</b> ábranla siempre desde ese ícono (no desde WhatsApp), y la primera vez háganlo con internet o datos activos para que quede guardada en el celular — después de esa primera vez ya funciona sin señal</div>
+      <p style="font-size:13px;color:var(--ink-600);line-height:1.55;margin:0;">Este aplicativo no necesita internet: todos los registros, fotos y firmas se guardan directamente en la memoria de este navegador/dispositivo (IndexedDB). Si abres el archivo en otro equipo o borras los datos del navegador, esa información no estará disponible allí  por eso se recomienda exportar copias de seguridad.</p>
+      <p class="muted" id="offlineReady" style="margin:12px 0 0;"></p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="app-foot">
+  <b>RegistrObraApp</b> · Compensación Ambiental · Funciona 100% sin conexión · <span id="verTxt"></span>
+</footer>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Detalle de registro</h3>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div id="modalBody"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-sm" id="modalEdit">Editar</button>
+      <button class="btn btn-clay btn-sm" id="modalPdf">Descargar PDF</button>
+      <button class="btn btn-danger btn-sm" id="modalDelete">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="libs/xlsx.full.min.js"></script>
+<script src="libs/jspdf.umd.min.js"></script>
+<script src="libs/jspdf.plugin.autotable.min.js"></script>
+<script src="libs/jszip.min.js"></script>
+<script src="logo-cenit.js"></script>
+<script src="pdt-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
