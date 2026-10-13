@@ -1,6 +1,6 @@
 {
-  "name": "RegistrObraApp - BQS",
-  "short_name": "RegistrObraApp",
+  "name": "Registro de Obra - BQS",
+  "short_name": "Registro de Obra",
   "description": "Registro de obra en campo para compensación ambiental (BQS). Funciona sin conexión y sincroniza.",
   "lang": "es-CO",
   "start_url": "./index.html",

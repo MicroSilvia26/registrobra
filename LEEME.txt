@@ -1,3 +1,4 @@
-RegistrObraApp v3 — archivos de la app (todos sueltos, sin subcarpetas)
-Suba todos estos archivos a GitHub. En config.js va el enlace de la base compartida
-de Google (ver GUIA-INSTALACION.txt). El archivo Code.gs NO se sube a GitHub.
+Registro de Obra v4 — archivos de la app (todos sueltos, sin subcarpetas)
+Suba todos estos archivos a GitHub (repositorio registrobra), reemplazando los anteriores.
+config.js conserva el mismo enlace de la base compartida de Google. El archivo Code.gs NO se sube a GitHub.
+Nuevo en v4: logos-clientes.js (logos de Hocol y Ecopetrol).

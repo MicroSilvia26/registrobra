@@ -1,9 +1,10 @@
 /* ============================================================
-   RegistrObraApp v3 — Registro de obra en campo
+   Registro de Obra v4 — Registro de obra en campo (BQS)
    Funciona sin conexión y sincroniza con Google Sheets + Drive
-   Datos maestros: 10 PDT CENIT (ver pdt-data.js)
+   Datos maestros: PDT de Cenit, Hocol y Ecopetrol (ver pdt-data.js)
    ============================================================ */
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '4.0.0';
+const APP_NAME = 'Registro de Obra';
 const NR = 'No registra en PDT';
 const NA = 'No aplica';
 const OTRO = '__otro__';
@@ -14,9 +15,19 @@ const C_NAVY = [21, 66, 112], C_TEAL = [31, 155, 196], C_SLATE = [52, 80, 111], 
 /* ---------------- Datos maestros ---------------- */
 const PROYECTOS = {};
 PDT_DATA.proyectos.forEach(p => { PROYECTOS[p.id] = p; });
-const LINES = PDT_DATA.lineas;               // {k,p,z,o,c,a,d,m,pr,i,ds,u,q,n}
+const LINES = PDT_DATA.lineas;               // {k,p,z,o,c,a,d,m,pr,i,ds,u,q,n} + cl (cliente)
 const LINE_BY_KEY = {};
-LINES.forEach(l => { l.sig = lineSig(l); LINE_BY_KEY[l.k] = l; });
+LINES.forEach(l => { l.cl = (PROYECTOS[l.p] && PROYECTOS[l.p].cliente) || 'Cenit'; l.sig = lineSig(l); LINE_BY_KEY[l.k] = l; });
+const CLIENTES = PDT_DATA.clientes || ['Cenit'];
+const CLIENT_LOGOS = {
+  Cenit: { src: LOGO_CENIT_BASE64, w: LOGO_CENIT_W, h: LOGO_CENIT_H },
+  Hocol: { src: LOGO_HOCOL_BASE64, w: LOGO_HOCOL_W, h: LOGO_HOCOL_H },
+  Ecopetrol: { src: LOGO_ECOPETROL_BASE64, w: LOGO_ECOPETROL_W, h: LOGO_ECOPETROL_H }
+};
+/* Cliente de un registro: el guardado o, si no lo tiene (registros anteriores), el del proyecto */
+function clienteOf(r) { return (r && r.cliente) || (r && PROYECTOS[r.proyecto] && PROYECTOS[r.proyecto].cliente) || 'Cenit'; }
+function usaComp(cliente) { return cliente === 'Cenit'; }   // Hocol y Ecopetrol no manejan ID COMP
+function clientLogo(cliente) { return CLIENT_LOGOS[cliente] || null; }
 const ZONAS = [];
 const ZONA_PROY = {};
 LINES.forEach(l => { if (!ZONAS.includes(l.z)) { ZONAS.push(l.z); ZONA_PROY[l.z] = l.p; } });
@@ -148,10 +159,11 @@ $('btnCal').addEventListener('click', () => {
 $('f_fecha_cal').addEventListener('change', e => { if (e.target.value) $('f_fecha').value = isoToDMA(e.target.value); });
 
 /* ============================================================
-   CASCADA: Zona → ODS → ID COMP → Departamento → Municipio → Predio
+   CASCADA: Cliente → Zona → ODS → ID COMP → Departamento → Municipio → Predio
    ============================================================ */
 const CASCADE = [
-  { id: 'f_zona', key: 'z', ph: 'Selecciona la zona…' },
+  { id: 'f_cliente', key: 'cl', ph: 'Selecciona el cliente…' },
+  { id: 'f_zona', key: 'z', ph: 'Selecciona la zona / proyecto…' },
   { id: 'f_ods', key: 'o', ph: 'Selecciona el ODS…' },
   { id: 'f_comp', key: 'c', ph: 'Selecciona el ID COMP…', sort: compareComp },
   { id: 'f_departamento', key: 'd', ph: 'Selecciona el departamento…' },
@@ -180,8 +192,9 @@ function populateLevel(idx, keepValue) {
   if (lvl.key === 'pr') { $('f_predio_otro').style.display = 'none'; }
   if (!parentsOk) { fillSelect(el, [], lvl.ph); el.disabled = true; if (lvl.key === 'pr') PDT_PREDIOS = []; return; }
   let vals = uniq(linesMatching(parentSel).map(l => l[lvl.key]));
-  if (idx === 0) vals = ZONAS.slice();
-  vals.sort(lvl.sort || ((a, b) => a.localeCompare(b, 'es')));
+  if (idx === 0) vals = CLIENTES.slice();
+  else if (lvl.key === 'z') vals = ZONAS.filter(z => vals.includes(z));
+  else vals.sort(lvl.sort || ((a, b) => a.localeCompare(b, 'es')));
   if (lvl.key === 'pr') {
     PDT_PREDIOS = vals.slice();
     const manual = manualPrediosFor(parentSel).filter(v => !vals.includes(v));
@@ -204,6 +217,7 @@ function onCascadeChange(idx, presets) {
   presets = presets || {};
   for (let j = idx + 1; j < CASCADE.length; j++) populateLevel(j, presets[CASCADE[j].key]);
   updateProjStrip();
+  updateCompVisibility();
   updateActo(presets.a);
   refreshItemRows();
 }
@@ -217,10 +231,16 @@ function predioIsManual() { const v = $('f_predio').value; return !!v && !PDT_PR
 function currentPredio() { const v = $('f_predio').value; return v === OTRO ? $('f_predio_otro').value.trim().replace(/\s+/g, ' ') : v; }
 
 function updateProjStrip() {
-  const z = $('f_zona').value;
+  const z = $('f_zona').value, cl = $('f_cliente').value;
   $('projStrip').innerHTML = z
     ? 'Proyecto: <b>' + escapeHtml(proyLabel(ZONA_PROY[z])) + '</b>' + (PROYECTOS[ZONA_PROY[z]].contrato ? ' · Contrato/ODS ' + escapeHtml(PROYECTOS[ZONA_PROY[z]].contrato) : '')
-    : 'Proyecto: <b>elige una zona</b>';
+    : (cl ? 'Cliente: <b>' + escapeHtml(cl) + '</b> · elige la zona / proyecto' : 'Proyecto: <b>elige el cliente</b>');
+  const lg = clientLogo(cl);
+  $('clientLogo').innerHTML = lg ? '<img src="' + lg.src + '" alt="Logo ' + escapeHtml(cl) + '">' : '';
+}
+function updateCompVisibility() {
+  const cl = $('f_cliente').value;
+  $('compField').style.display = cl && !usaComp(cl) ? 'none' : '';
 }
 function cascadeComplete() { return CASCADE.every(l => $(l.id).value); }
 function updateActo(preset) {
@@ -281,7 +301,7 @@ function executedBySig(excludeUid) {
   return map;
 }
 function itemOptionsHtml(lines, selectedKey) {
-  if (!lines.length) return '<option value="">' + (cascadeComplete() ? 'Elige primero el acto administrativo…' : 'Completa zona, ODS, COMP, departamento, municipio y predio…') + '</option>';
+  if (!lines.length) return '<option value="">' + (cascadeComplete() ? 'Elige primero el acto administrativo…' : 'Completa cliente, zona, ODS, departamento, municipio y predio…') + '</option>';
   return '<option value="">Selecciona el ítem…</option>' + lines.map(l => {
     const d = l.ds.length > 90 ? l.ds.slice(0, 88) + '…' : l.ds;
     return '<option value="' + l.k + '"' + (l.k === selectedKey ? ' selected' : '') + '>' + escapeHtml(l.i + ' · ' + d + ' (' + l.u + ')') + '</option>';
@@ -451,7 +471,7 @@ function validateForm() {
   CASCADE.forEach(l => { if (!$(l.id).value) { markError($(l.id)); ok = false; } });
   if ($('f_predio').value === OTRO && !currentPredio()) { markError($('f_predio_otro')); ok = false; }
   if ($('f_acto_select').style.display !== 'none' && !$('f_acto_select').value) { markError($('f_acto_select')); ok = false; }
-  if (!$('f_registrado').value.trim()) { markError($('f_registrado')); ok = false; }
+  if ($('f_registrado').value.trim().split(/\s+/).filter(w => w.length >= 2).length < 2) { markError($('f_registrado')); ok = false; }
   if (!dmaToIso($('f_fecha').value)) { markError($('f_fecha')); ok = false; }
   const rows = document.querySelectorAll('#itemsContainer .item-row');
   rows.forEach(div => {
@@ -492,6 +512,7 @@ $('regForm').addEventListener('submit', async e => {
     uid: prev && prev.uid ? prev.uid : uid(),
     owner: prev ? prev.owner : STATE.device.id,
     registradoPor: nombre,
+    cliente: $('f_cliente').value,
     proyecto: ZONA_PROY[z],
     proyectoNombre: proyLabel(ZONA_PROY[z]),
     zona: z,
@@ -528,7 +549,7 @@ $('regForm').addEventListener('submit', async e => {
   }
 });
 function resetForm(keepContext) {
-  const ctx = keepContext && !STATE.editingId ? { z: $('f_zona').value, o: $('f_ods').value, c: $('f_comp').value, d: $('f_departamento').value, m: $('f_municipio').value, pr: currentPredio(), fecha: $('f_fecha').value } : null;
+  const ctx = keepContext && !STATE.editingId ? { cl: $('f_cliente').value, z: $('f_zona').value, o: $('f_ods').value, c: $('f_comp').value, d: $('f_departamento').value, m: $('f_municipio').value, pr: currentPredio(), fecha: $('f_fecha').value } : null;
   $('regForm').reset();
   $('itemsContainer').innerHTML = '';
   STATE.photos = []; renderPhotoGrid(); setFirma(null);
@@ -538,7 +559,7 @@ function resetForm(keepContext) {
   $('f_ejecutor').value = EJECUTOR;
   $('f_registrado').value = STATE.device ? (STATE.device.nombre || '') : '';
   clearErrors();
-  populateLevel(0, ctx ? ctx.z : '');
+  populateLevel(0, ctx ? ctx.cl : '');
   onCascadeChange(0, ctx || {});
   $('f_fecha').value = ctx && ctx.fecha ? ctx.fecha : isoToDMA(todayIso());
   addItemRow();
@@ -552,8 +573,8 @@ function editRecord(id) {
   if (!canEdit(r)) { toast('Solo quien creó este registro (o el administrador) puede editarlo', true); return; }
   resetForm(false);
   STATE.editingId = id;
-  populateLevel(0, r.zona);
-  onCascadeChange(0, { o: r.ods, c: r.comp, d: r.departamento, m: r.municipio, pr: r.predio, a: r.acto });
+  populateLevel(0, clienteOf(r));
+  onCascadeChange(0, { z: r.zona, o: r.ods, c: r.comp, d: r.departamento, m: r.municipio, pr: r.predio, a: r.acto });
   $('f_fecha').value = isoToDMA(r.fecha);
   $('f_obs').value = r.observaciones || '';
   $('f_ejecutor').value = r.ejecutor || EJECUTOR;
@@ -744,9 +765,13 @@ function updateCounts() {
 }
 function refreshFilterSelects() {
   const recs = visibleRecords();
-  const zs = uniq(recs.map(r => r.zona)).filter(Boolean).sort();
-  ['filterZona', 'expZona'].forEach(id => {
-    const el = $(id), v = el.value;
+  const cls = CLIENTES.filter(c => recs.some(r => clienteOf(r) === c));
+  [['filterCliente', 'filterZona'], ['expCliente', 'expZona']].forEach(([cid, zid]) => {
+    const ce = $(cid), cv = ce.value;
+    ce.innerHTML = '<option value="">Todos los clientes</option>' + cls.map(c => '<option>' + escapeHtml(c) + '</option>').join('');
+    if (cls.includes(cv)) ce.value = cv;
+    const zs = uniq(recs.filter(r => !ce.value || clienteOf(r) === ce.value).map(r => r.zona)).filter(Boolean).sort();
+    const el = $(zid), v = el.value;
     el.innerHTML = '<option value="">Todas las zonas</option>' + zs.map(z => '<option>' + escapeHtml(z) + '</option>').join('');
     if (zs.includes(v)) el.value = v;
   });
@@ -756,18 +781,21 @@ function refreshFilterSelects() {
   fc.innerHTML = '<option value="">Todos los COMP</option>' + cs.map(c => '<option>' + escapeHtml(c) + '</option>').join('');
   if (cs.includes(v)) fc.value = v;
 }
+/* Encabezado corto de un registro: ID COMP (solo Cenit) o zona, y predio */
+function recHead(r) { return (usaComp(clienteOf(r)) && r.comp && r.comp !== NA ? r.comp + ' · ' : (r.zona ? r.zona + ' · ' : '')) + (r.predio || ''); }
 function syncTag(r) { return r.sync === 'ok' ? '<span class="tag ok">☁ En la nube</span>' : '<span class="tag pend">⏳ Por subir</span>'; }
 function renderRegistros() {
   refreshFilterSelects();
   const q = $('searchBox').value.trim().toLowerCase();
-  const fz = $('filterZona').value, fc = $('filterComp').value, fm = $('filterMine').value;
+  const fcl = $('filterCliente').value, fz = $('filterZona').value, fc = $('filterComp').value, fm = $('filterMine').value;
   const list = visibleRecords().filter(r => {
+    if (fcl && clienteOf(r) !== fcl) return false;
     if (fz && r.zona !== fz) return false;
     if (fc && r.comp !== fc) return false;
     if (fm === 'mios' && !isMine(r)) return false;
     if (fm === 'pend' && r.sync === 'ok') return false;
     if (!q) return true;
-    const hay = [codeOf(r), r.comp, r.predio, r.municipio, r.departamento, r.zona, r.ods, r.observaciones, r.registradoPor, isoToDMA(r.fecha)].concat((r.items || []).map(i => i.item + ' ' + i.actividad)).join(' ').toLowerCase();
+    const hay = [codeOf(r), clienteOf(r), r.comp, r.predio, r.municipio, r.departamento, r.zona, r.ods, r.observaciones, r.registradoPor, isoToDMA(r.fecha)].concat((r.items || []).map(i => i.item + ' ' + i.actividad)).join(' ').toLowerCase();
     return hay.includes(q);
   });
   if (!list.length) {
@@ -778,13 +806,13 @@ function renderRegistros() {
     const its = r.items || [], f0 = fotosOf(r)[0];
     return '<div class="rec-card" data-id="' + r.id + '">' +
       '<div class="rec-thumb">' + (f0 ? '<img src="' + imgSrc(f0, 120) + '" alt="" loading="lazy" onerror="this.dataset.broken=1">' : '') + '</div>' +
-      '<div class="rec-main"><div class="rec-top"><span class="rec-comp">' + escapeHtml(r.comp) + ' · ' + escapeHtml(r.predio) + '</span><span class="rec-date">' + escapeHtml(isoToDMA(r.fecha)) + '</span></div>' +
+      '<div class="rec-main"><div class="rec-top"><span class="rec-comp">' + escapeHtml(recHead(r)) + '</span><span class="rec-date">' + escapeHtml(isoToDMA(r.fecha)) + '</span></div>' +
       '<div class="rec-act">' + escapeHtml(its.map(i => i.item + ' ' + i.actividad).join(' · ')) + '</div>' +
-      '<div class="rec-tags">' + syncTag(r) + (isMine(r) ? '<span class="tag me">Mío</span>' : '') + '<span class="tag">' + escapeHtml(r.registradoPor || 'Sin nombre') + '</span><span class="tag">' + escapeHtml(r.zona) + '</span><span class="tag qty">' + its.length + ' actividad(es)</span><span class="tag">' + fotosOf(r).length + ' fotos</span></div></div></div>';
+      '<div class="rec-tags">' + syncTag(r) + (isMine(r) ? '<span class="tag me">Mío</span>' : '') + '<span class="tag">' + escapeHtml(r.registradoPor || 'Sin nombre') + '</span><span class="tag cli">' + escapeHtml(clienteOf(r)) + '</span><span class="tag">' + escapeHtml(r.zona) + '</span><span class="tag qty">' + its.length + ' actividad(es)</span><span class="tag">' + fotosOf(r).length + ' fotos</span></div></div></div>';
   }).join('') + (list.length > 300 ? '<p class="muted" style="text-align:center;">Mostrando 300 de ' + list.length + '. Usa los filtros para acotar.</p>' : '');
   $('recList').querySelectorAll('.rec-card').forEach(c => c.addEventListener('click', () => openDetail(+c.dataset.id)));
 }
-['searchBox', 'filterZona', 'filterComp', 'filterMine'].forEach(id => $(id).addEventListener(id === 'searchBox' ? 'input' : 'change', renderRegistros));
+['searchBox', 'filterCliente', 'filterZona', 'filterComp', 'filterMine'].forEach(id => $(id).addEventListener(id === 'searchBox' ? 'input' : 'change', renderRegistros));
 
 let detailId = null;
 function openDetail(id) {
@@ -798,7 +826,7 @@ function openDetail(id) {
   const fm = firmaOf(r);
   $('modalBody').innerHTML = '<dl class="detail-grid">' + dl + '</dl>' +
     '<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:10px;"><tr><th style="text-align:left;padding:5px;">Ítem</th><th style="text-align:left;padding:5px;">Actividad</th><th style="text-align:right;padding:5px;">Ejecutado</th></tr>' + its + '</table>' +
-    (r.observaciones ? '<p style="font-size:13px;"><b>Observaciones:</b> ' + escapeHtml(r.observaciones) + '</p>' : '') +
+    '<p style="font-size:13px;"><b>Observaciones:</b> ' + escapeHtml(r.observaciones || 'Sin observaciones.') + '</p>' +
     '<div class="detail-photos">' + fotosOf(r).map(f => '<img src="' + imgSrc(f, 300) + '" alt="" loading="lazy">').join('') + '</div>' +
     (fm ? '<div class="sig-view"><img src="' + imgSrc(fm, 500) + '" alt="Firma"></div>' : '') +
     (r.carpetaUrl ? '<p style="font-size:12.5px;margin-top:10px;"><a href="' + escapeHtml(r.carpetaUrl) + '" target="_blank" rel="noopener">Ver carpeta de fotos en Google Drive</a></p>' : '');
@@ -842,21 +870,26 @@ function compGroups() {
 }
 const COMP_GROUPS = compGroups();
 function renderMaestro() {
+  const mc = $('maestroCliente'), mcv = mc.value;
+  mc.innerHTML = '<option value="">Todos los clientes</option>' + CLIENTES.map(c => '<option>' + escapeHtml(c) + '</option>').join('');
+  mc.value = mcv;
   const zs = $('maestroZona'), v = zs.value;
-  zs.innerHTML = '<option value="">Todas las zonas</option>' + ZONAS.map(z => '<option>' + escapeHtml(z) + '</option>').join('');
-  zs.value = v;
+  const zl = ZONAS.filter(z => !mc.value || PROYECTOS[ZONA_PROY[z]].cliente === mc.value);
+  zs.innerHTML = '<option value="">Todas las zonas</option>' + zl.map(z => '<option>' + escapeHtml(z) + '</option>').join('');
+  zs.value = zl.includes(v) ? v : '';
   const recs = visibleRecords();
   const ex = executedBySig();
   const recByComp = {};
   recs.forEach(r => { const k = r.proyecto + '|' + r.zona + '|' + r.ods + '|' + r.comp; recByComp[k] = (recByComp[k] || 0) + 1; });
   const compsCon = COMP_GROUPS.filter(g => recByComp[g.p + '|' + g.z + '|' + g.o + '|' + g.c]).length;
   $('maestroKpis').innerHTML =
-    '<div class="kpi"><div class="num">' + COMP_GROUPS.length + '</div><div class="lbl">ID COMP en PDT</div></div>' +
-    '<div class="kpi"><div class="num">' + compsCon + '</div><div class="lbl">COMP con registros</div></div>' +
+    '<div class="kpi"><div class="num">' + COMP_GROUPS.length + '</div><div class="lbl">ID COMP / proyectos en PDT</div></div>' +
+    '<div class="kpi"><div class="num">' + compsCon + '</div><div class="lbl">Con registros</div></div>' +
     '<div class="kpi"><div class="num">' + recs.length + '</div><div class="lbl">Registros</div></div>';
   const q = $('compSearch').value.trim().toLowerCase();
   const fz = zs.value, solo = $('maestroSolo').value;
   const list = COMP_GROUPS.filter(g => {
+    if (mc.value && PROYECTOS[g.p].cliente !== mc.value) return false;
     if (fz && g.z !== fz) return false;
     const nreg = recByComp[g.p + '|' + g.z + '|' + g.o + '|' + g.c] || 0;
     if (solo === 'con' && !nreg) return false;
@@ -879,15 +912,15 @@ function renderMaestro() {
     const manualTxt = manual.length ? '<div class="muted" style="margin-top:8px;">Además hay ' + manual.length + ' registro(s) en predios escritos en campo: ' + escapeHtml(uniq(manual.map(r => r.predio)).join(', ')) + '.</div>' : '';
     const avg = te ? (tq / te * 100) : 0;
     const actos = uniq(g.lines.map(l => l.a)), munis = uniq(g.lines.map(l => l.m + ' (' + l.d + ')'));
-    return '<details class="comp-card"><summary><span class="cid">' + escapeHtml(g.c === NA ? 'Sin ID COMP' : g.c) + '</span>' +
+    return '<details class="comp-card"><summary><span class="cid">' + escapeHtml(g.c === NA ? (usaComp(PROYECTOS[g.p].cliente) ? 'Sin ID COMP' : g.z) : g.c) + '</span>' +
       '<span class="cinfo"><b>' + escapeHtml(g.z + ' · ' + g.o) + '</b><br>' + escapeHtml(munis.join(', ')) + '<br>' + nreg + ' registro(s) · ' + g.lines.length + ' línea(s) PDT</span>' +
       '<span class="cpct">' + avg.toFixed(0) + '%</span></summary>' +
-      '<div class="comp-body"><div class="muted" style="margin-bottom:6px;">Proyecto: ' + escapeHtml(proyLabel(g.p)) + '<br>Acto(s): ' + escapeHtml(actos.join(' · ')) + '</div>' + rows + manualTxt + '</div></details>';
+      '<div class="comp-body"><div class="muted" style="margin-bottom:6px;">Cliente: ' + escapeHtml(PROYECTOS[g.p].cliente) + '<br>Proyecto: ' + escapeHtml(proyLabel(g.p)) + '<br>Acto(s): ' + escapeHtml(actos.join(' · ')) + '</div>' + rows + manualTxt + '</div></details>';
   }).join('') : '<div class="empty-state"><p><b>Sin resultados</b></p></div>';
   $('compMore').innerHTML = list.length > maestroLimit ? '<button class="btn btn-ghost btn-sm" id="btnMore">Ver más (' + (list.length - maestroLimit) + ' restantes)</button>' : '';
   if ($('btnMore')) $('btnMore').addEventListener('click', () => { maestroLimit += 30; renderMaestro(); });
 }
-['compSearch', 'maestroZona', 'maestroSolo'].forEach(id => $(id).addEventListener(id === 'compSearch' ? 'input' : 'change', () => { maestroLimit = 30; renderMaestro(); }));
+['compSearch', 'maestroCliente', 'maestroZona', 'maestroSolo'].forEach(id => $(id).addEventListener(id === 'compSearch' ? 'input' : 'change', () => { maestroLimit = 30; renderMaestro(); }));
 $('btnMaestroExcel').addEventListener('click', async () => {
   try {
     const buf = await buildMaestroXlsx(visibleRecords(), null);
@@ -900,16 +933,19 @@ $('btnMaestroExcel').addEventListener('click', async () => {
    EXCEL MAESTRO COMP (ExcelJS, con logos)
    ============================================================ */
 function recordFolder(r) {
-  return [ROOT_FOLDER, safeName(proyLabel(r.proyecto).replace(' · ', ' - ')), safeName(r.comp === NA ? 'Sin ID COMP' : r.comp), safeName((r.fecha || 'sin-fecha') + '_' + (r.predio === NR ? 'Sin predio' : r.predio) + '_' + codeOf(r))].join('/');
+  return [ROOT_FOLDER, safeName(proyLabel(r.proyecto).replace(' · ', ' - ')), safeName(!usaComp(clienteOf(r)) ? (r.zona || 'Sin zona') : (r.comp === NA ? 'Sin ID COMP' : r.comp)), safeName((r.fecha || 'sin-fecha') + '_' + (r.predio === NR ? 'Sin predio' : r.predio) + '_' + codeOf(r))].join('/');
 }
-function safeName(s) { return String(s || '').replace(/[\\/:*?"<>|#%\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'sin-nombre'; }
+function safeName(s) { return String(s || '').replace(/\s*·\s*/g, ' - ').replace(/[\\/:*?"<>|#%\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'sin-nombre'; }
 function numOrBlank(v) { return v === null || v === undefined || v === '' || isNaN(v) ? '' : Number(v); }
 async function buildMaestroXlsx(records, projectIds) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'RegistrObraApp · ' + EJECUTOR;
+  wb.creator = APP_NAME + ' · ' + EJECUTOR;
   wb.created = new Date();
   const imgBqs = wb.addImage({ base64: LOGO_BQS_BASE64, extension: 'png' });
-  const imgCenit = wb.addImage({ base64: LOGO_CENIT_BASE64, extension: 'png' });
+  // logo del cliente: solo si todos los registros (o proyectos) son de un mismo cliente
+  const cls = uniq((records.length ? records.map(clienteOf) : (projectIds || []).map(p => PROYECTOS[p] && PROYECTOS[p].cliente)).filter(Boolean));
+  const cLogo = cls.length === 1 ? clientLogo(cls[0]) : null;
+  const imgCli = cLogo ? wb.addImage({ base64: cLogo.src, extension: 'png' }) : null;
   const sub = 'Generado: ' + isoToDMA(todayIso()) + ' · ' + records.length + ' registro(s) · Ejecutor: ' + EJECUTOR;
   const NAVY = 'FF154270', TEAL = 'FF1F9BC4';
 
@@ -919,8 +955,11 @@ async function buildMaestroXlsx(records, projectIds) {
     ws.getRow(1).height = 24; ws.getRow(2).height = 24; ws.getRow(3).height = 18; ws.getRow(4).height = 18;
     const bqsH = 54, bqsW = bqsH * LOGO_BQS_W / LOGO_BQS_H;
     ws.addImage(imgBqs, { tl: { col: 0.1, row: 0.2 }, ext: { width: bqsW, height: bqsH } });
-    const cenH = 58, cenW = cenH * LOGO_CENIT_W / LOGO_CENIT_H;
-    ws.addImage(imgCenit, { tl: { col: Math.min(cols.length - 1, 6) + 0.1, row: 0.3 }, ext: { width: cenW, height: cenH } });
+    if (imgCli) {
+      let cH = 54, cW = cH * cLogo.w / cLogo.h;
+      if (cW > 150) { cW = 150; cH = cW * cLogo.h / cLogo.w; }
+      ws.addImage(imgCli, { tl: { col: Math.min(cols.length - 1, 7) + 0.1, row: 0.3 }, ext: { width: cW, height: cH } });
+    }
     const tc = ws.getCell('C1'); tc.value = title; tc.font = { bold: true, size: 14, color: { argb: NAVY } };
     const sc = ws.getCell('C2'); sc.value = sub; sc.font = { size: 10, color: { argb: 'FF34506F' } };
     const cc = ws.getCell('C3'); cc.value = 'BQS · Business & Quality Services SAS — Compensación Ambiental'; cc.font = { size: 9, italic: true, color: { argb: 'FF7A8796' } };
@@ -942,15 +981,15 @@ async function buildMaestroXlsx(records, projectIds) {
     return ws;
   }
 
-  const cols1 = ['Código', 'Fecha (DD/MM/AA)', 'Registrado por', 'Proyecto', 'Zona', 'ODS', 'ID COMP', 'Acto administrativo', 'Departamento', 'Municipio', 'Nombre del predio', 'Predio escrito en campo', 'Ejecutor', 'Ítem', 'Descripción de la actividad', 'Unidad', 'Cantidad ejecutada', 'Cantidad contractual PDT', 'N° fotos', 'Firma', 'Observaciones', 'Estado', 'Carpeta en Google Drive', 'Carpeta en el paquete .zip'];
+  const cols1 = ['Código', 'Fecha (DD/MM/AA)', 'Registrado por', 'Cliente', 'Proyecto', 'Zona', 'ODS', 'ID COMP', 'Acto administrativo', 'Departamento', 'Municipio', 'Nombre del predio', 'Predio escrito en campo', 'Ejecutor', 'Ítem', 'Descripción de la actividad', 'Unidad', 'Cantidad ejecutada', 'Cantidad contractual PDT', 'N° fotos', 'Firma', 'Observaciones', 'Estado', 'Carpeta en Google Drive', 'Carpeta en el paquete .zip'];
   const rows1 = [];
   records.slice().sort((a, b) => (a.proyecto || '').localeCompare(b.proyecto || '') || compareComp(a.comp, b.comp) || (a.fecha || '').localeCompare(b.fecha || '')).forEach(r => {
     const its = r.items && r.items.length ? r.items : [{}];
-    its.forEach(it => rows1.push([codeOf(r), isoToDMA(r.fecha), r.registradoPor || '', proyLabel(r.proyecto), r.zona, r.ods, r.comp, r.acto, r.departamento, r.municipio, r.predio, r.predioManual ? 'Sí' : 'No', r.ejecutor,
+    its.forEach(it => rows1.push([codeOf(r), isoToDMA(r.fecha), r.registradoPor || '', clienteOf(r), proyLabel(r.proyecto), r.zona, r.ods, usaComp(clienteOf(r)) ? r.comp : '', r.acto, r.departamento, r.municipio, r.predio, r.predioManual ? 'Sí' : 'No', r.ejecutor,
       it.item || '', it.actividad || '', it.unidad || '', numOrBlank(it.cantidad), numOrBlank(it.contractual), fotosOf(r).length, firmaOf(r) ? 'Sí' : 'No', r.observaciones || '',
       r.sync === 'ok' ? 'Sincronizado' : 'Por subir', r.carpetaUrl || '', recordFolder(r)]));
   });
-  sheet('Registros', 'MAESTRO COMP · Registros de obra en campo', cols1, [10, 11, 20, 30, 16, 9, 12, 28, 15, 18, 22, 10, 26, 7, 50, 12, 11, 12, 7, 6, 28, 12, 40, 55], rows1, [17, 18]);
+  sheet('Registros', 'MAESTRO COMP · Registros de obra en campo', cols1, [10, 11, 20, 12, 30, 16, 9, 12, 28, 15, 18, 22, 10, 26, 7, 50, 12, 11, 12, 7, 6, 28, 12, 40, 55], rows1, [18, 19]);
 
   const pids = projectIds || uniq(LINES.map(l => l.p));
   const ex = {};
@@ -960,26 +999,26 @@ async function buildMaestroXlsx(records, projectIds) {
     ex[it.sig].q += parseFloat(it.cantidad) || 0; ex[it.sig].n++;
     if ((r.fecha || '') > ex[it.sig].last) ex[it.sig].last = r.fecha || '';
   }));
-  const cols2 = ['Proyecto', 'Zona', 'ODS', 'ID COMP', 'Acto administrativo', 'Departamento', 'Municipio', 'Nombre del predio', 'Ítem', 'Descripción', 'Unidad', 'Cantidad contractual PDT', 'Cantidad ejecutada acumulada', '% avance', 'N° actividades registradas', 'Último registro'];
+  const cols2 = ['Cliente', 'Proyecto', 'Zona', 'ODS', 'ID COMP', 'Acto administrativo', 'Departamento', 'Municipio', 'Nombre del predio', 'Ítem', 'Descripción', 'Unidad', 'Cantidad contractual PDT', 'Cantidad ejecutada acumulada', '% avance', 'N° actividades registradas', 'Último registro'];
   const rows2 = LINES.filter(l => pids.includes(l.p)).map(l => {
     const e = ex[l.sig] || { q: 0, n: 0, last: '' };
-    return [proyLabel(l.p), l.z, l.o, l.c, l.a, l.d, l.m, l.pr, l.i, l.ds, l.u, numOrBlank(l.q), e.q, l.q ? Math.round(e.q / l.q * 1000) / 10 : '', e.n, isoToDMA(e.last)];
+    return [l.cl, proyLabel(l.p), l.z, l.o, usaComp(l.cl) ? l.c : '', l.a, l.d, l.m, l.pr, l.i, l.ds, l.u, numOrBlank(l.q), e.q, l.q ? Math.round(e.q / l.q * 1000) / 10 : '', e.n, isoToDMA(e.last)];
   });
   // actividades en predios escritos en campo (sin cantidad contractual)
   Object.keys(ex).filter(s => s.split('|')[4] && s.split('|')[4].startsWith('✎ ')).forEach(s => {
     const [p, c, d, m, pr, i, ds, u] = s.split('|');
     if (!pids.includes(p)) return;
     const g = LINES.find(l => l.p === p && l.c === c) || {};
-    rows2.push([proyLabel(p), g.z || '', g.o || '', c, '', d, m, pr.slice(2) + ' (escrito en campo)', i, ds, u, '', ex[s].q, '', ex[s].n, isoToDMA(ex[s].last)]);
+    rows2.push([(PROYECTOS[p] || {}).cliente || '', proyLabel(p), g.z || '', g.o || '', usaComp((PROYECTOS[p] || {}).cliente) ? c : '', '', d, m, pr.slice(2) + ' (escrito en campo)', i, ds, u, '', ex[s].q, '', ex[s].n, isoToDMA(ex[s].last)]);
   });
-  sheet('Avance PDT', 'MAESTRO COMP · Avance frente al PDT', cols2, [30, 16, 9, 12, 28, 15, 18, 22, 7, 50, 12, 12, 12, 9, 10, 11], rows2, [12, 13]);
+  sheet('Avance PDT', 'MAESTRO COMP · Avance frente al PDT', cols2, [12, 30, 16, 9, 12, 28, 15, 18, 22, 7, 50, 12, 12, 12, 9, 10, 11], rows2, [13, 14]);
 
-  const cols3 = ['Proyecto', 'Zona', 'ODS', 'ID COMP', 'Líneas PDT', 'Líneas con avance', 'N° registros', 'Último registro'];
+  const cols3 = ['Cliente', 'Proyecto', 'Zona', 'ODS', 'ID COMP', 'Líneas PDT', 'Líneas con avance', 'N° registros', 'Último registro'];
   const rows3 = COMP_GROUPS.filter(g => pids.includes(g.p)).map(g => {
     const regs = records.filter(r => r.proyecto === g.p && r.zona === g.z && r.ods === g.o && r.comp === g.c);
-    return [proyLabel(g.p), g.z, g.o, g.c, g.lines.length, g.lines.filter(l => ex[l.sig]).length, regs.length, isoToDMA(regs.map(r => r.fecha || '').sort().pop() || '')];
+    return [PROYECTOS[g.p].cliente, proyLabel(g.p), g.z, g.o, usaComp(PROYECTOS[g.p].cliente) ? g.c : '', g.lines.length, g.lines.filter(l => ex[l.sig]).length, regs.length, isoToDMA(regs.map(r => r.fecha || '').sort().pop() || '')];
   });
-  sheet('Resumen por COMP', 'MAESTRO COMP · Resumen por ID COMP', cols3, [30, 18, 9, 14, 12, 14, 12, 13], rows3);
+  sheet('Resumen por COMP', 'MAESTRO COMP · Resumen por ID COMP', cols3, [12, 30, 18, 9, 14, 12, 14, 12, 13], rows3);
   return await wb.xlsx.writeBuffer();
 }
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -988,12 +1027,15 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
    INFORMES PDF / WORD
    ============================================================ */
 function generalRows(r) {
+  const cl = clienteOf(r);
   return [
-    ['Código', codeOf(r)], ['Fecha', isoToDMA(r.fecha) || '-'], ['Registrado por', r.registradoPor || '-'], ['Proyecto', proyLabel(r.proyecto)], ['Zona', r.zona || '-'], ['ODS', r.ods || '-'],
-    ['ID COMP', r.comp || '-'], ['Acto administrativo', r.acto || '-'], ['Departamento', r.departamento || '-'],
+    ['Código', codeOf(r)], ['Fecha', isoToDMA(r.fecha) || '-'], ['Registrado por', r.registradoPor || '-'], ['Cliente', cl], ['Proyecto', proyLabel(r.proyecto)], ['Zona', r.zona || '-'], ['ODS', r.ods || '-']
+  ].concat(usaComp(cl) ? [['ID COMP', r.comp || '-']] : []).concat([
+    ['Acto administrativo', r.acto || '-'], ['Departamento', r.departamento || '-'],
     ['Municipio', r.municipio || '-'], ['Nombre del predio', (r.predio || '-') + (r.predioManual ? ' (escrito en campo)' : '')], ['Ejecutor', r.ejecutor || EJECUTOR]
-  ];
+  ]);
 }
+function reportSubtitle(r) { return (usaComp(clienteOf(r)) ? 'ID COMP: ' + (r.comp || '-') + ' · ' : '') + 'Predio: ' + (r.predio || '-'); }
 function imgFmt(d) { return /^data:image\/png/.test(d) ? 'PNG' : 'JPEG'; }
 function imgDims(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res({ w: i.naturalWidth, h: i.naturalHeight }); i.onerror = rej; i.src = src; }); }
 function pdfSection(doc, t, x, y) {
@@ -1013,16 +1055,20 @@ async function buildPdf(records) {
     if (idx > 0) doc.addPage();
     let y = 46;
     const bw = 104, bh = bw * (LOGO_BQS_H / LOGO_BQS_W);
-    const lw = 56, lh = lw * (LOGO_CENIT_H / LOGO_CENIT_W);
+    const cLogo = clientLogo(clienteOf(r));
+    let lw = 0, lh = 0;
+    if (cLogo) { lh = Math.min(bh + 8, 48); lw = lh * cLogo.w / cLogo.h; if (lw > 105) { lw = 105; lh = lw * cLogo.h / cLogo.w; } }
     try { doc.addImage(LOGO_BQS_BASE64, 'PNG', mx, 36, bw, bh); } catch (e) { }
-    try { doc.addImage(LOGO_CENIT_BASE64, 'PNG', mx + bw + 12, 36 + (bh - lh) / 2, lw, lh); } catch (e) { }
+    if (cLogo) { try { doc.addImage(cLogo.src, 'PNG', mx + bw + 12, 36 + (bh - lh) / 2, lw, lh); } catch (e) { } }
     const logosW = bw + 12 + lw;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...C_NAVY);
     doc.text('Informe de Registro de Obra', pageW - mx, y, { align: 'right' }); y += 15;
     doc.setFontSize(10.5); doc.setTextColor(...C_TEAL);
-    doc.text('ID COMP: ' + (r.comp || '-') + ' · Predio: ' + (r.predio || '-'), pageW - mx, y, { align: 'right', maxWidth: cw - logosW - 14 }); y += 14;
+    const stl = doc.splitTextToSize(reportSubtitle(r), cw - logosW - 14);
+    doc.text(stl, pageW - mx, y, { align: 'right' }); y += 13 * stl.length + 1;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...C_SLATE);
-    doc.text(proyLabel(r.proyecto), pageW - mx, y, { align: 'right' }); y += 13;
+    const ptl = doc.splitTextToSize(clienteOf(r) + ' · ' + proyLabel(r.proyecto), cw - logosW - 14);
+    doc.text(ptl, pageW - mx, y, { align: 'right' }); y += 12 * ptl.length + 1;
     doc.setFontSize(8.5); doc.setTextColor(120, 120, 120);
     doc.text(codeOf(r) + ' · ' + (r.zona || '-') + ' · ' + (r.ods || '-') + ' · ' + (isoToDMA(r.fecha) || '-'), pageW - mx, y, { align: 'right' });
     y = Math.max(y + 10, 36 + bh + 8);
@@ -1045,10 +1091,10 @@ async function buildPdf(records) {
       columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: cw - 40 - 62 - 62 - 70 }, 2: { cellWidth: 62 }, 3: { cellWidth: 62 }, 4: { cellWidth: 70 } } });
     y = doc.lastAutoTable.finalY + 20;
 
-    if (r.observaciones) {
+    {
       y = pdfSpace(doc, y, 50, pageH); y = pdfSection(doc, 'Observaciones', mx, y);
       doc.setFontSize(9.5); doc.setTextColor(22, 32, 43);
-      doc.splitTextToSize(r.observaciones, cw).forEach(line => { y = pdfSpace(doc, y, 14, pageH); doc.text(line, mx, y); y += 13; });
+      doc.splitTextToSize(r.observaciones || 'Sin observaciones.', cw).forEach(line => { y = pdfSpace(doc, y, 14, pageH); doc.text(line, mx, y); y += 13; });
       y += 8;
     }
     const fotos = r.fotos || [];
@@ -1077,7 +1123,7 @@ async function buildPdf(records) {
   for (let p = 1; p <= tp; p++) {
     doc.setPage(p); doc.setDrawColor(207, 220, 233); doc.line(mx, pageH - 38, pageW - mx, pageH - 38);
     doc.setFontSize(7.5); doc.setTextColor(140, 140, 140);
-    doc.text('Informe generado el ' + isoToDMA(todayIso()) + ' · RegistrObraApp · BQS · Compensación Ambiental', mx, pageH - 24);
+    doc.text('Informe generado el ' + isoToDMA(todayIso()) + ' · ' + APP_NAME + ' · BQS · Compensación Ambiental', mx, pageH - 24);
     doc.text('Página ' + p + ' de ' + tp, pageW - mx, pageH - 24, { align: 'right' });
   }
   return doc;
@@ -1099,14 +1145,14 @@ async function buildWordHtml(records) {
     }
     const firma = r.firma ? '<img src="' + r.firma + '" width="200" style="max-width:220px;border:1px solid #cfdce9;padding:4px;"><div style="font-size:9px;color:#4a5868;">' + escapeHtml((r.registradoPor ? r.registradoPor + ' · ' : '') + (r.ejecutor || EJECUTOR)) + '</div>' : '<p style="font-size:9.5px;color:#7a8796;">Sin firma registrada.</p>';
     blocks.push((idx ? '<div style="page-break-before:always;">&nbsp;</div>' : '') +
-      '<table style="width:100%;"><tr><td style="width:190px;vertical-align:middle;"><img src="' + LOGO_BQS_BASE64 + '" width="110"> &nbsp; <img src="' + LOGO_CENIT_BASE64 + '" width="60"></td><td style="text-align:right;">' +
+      '<table style="width:100%;"><tr><td style="width:190px;vertical-align:middle;"><img src="' + LOGO_BQS_BASE64 + '" width="110">' + (clientLogo(clienteOf(r)) ? ' &nbsp; <img src="' + clientLogo(clienteOf(r)).src + '" width="80">' : '') + '</td><td style="text-align:right;">' +
       '<div style="font-size:16px;font-weight:bold;color:#154270;">Informe de Registro de Obra</div>' +
-      '<div style="font-size:11px;font-weight:bold;color:#1f9bc4;">ID COMP: ' + escapeHtml(r.comp) + ' · Predio: ' + escapeHtml(r.predio) + '</div>' +
-      '<div style="font-size:10px;color:#34506f;">' + escapeHtml(proyLabel(r.proyecto)) + '</div>' +
+      '<div style="font-size:11px;font-weight:bold;color:#1f9bc4;">' + escapeHtml(reportSubtitle(r)) + '</div>' +
+      '<div style="font-size:10px;color:#34506f;">' + escapeHtml(clienteOf(r) + ' · ' + proyLabel(r.proyecto)) + '</div>' +
       '<div style="font-size:9px;color:#888;">' + escapeHtml(codeOf(r) + ' · ' + r.zona + ' · ' + r.ods + ' · ' + isoToDMA(r.fecha)) + '</div></td></tr></table>' +
       '<hr style="border:none;border-top:1px solid #cfdce9;">' + sec('1. Datos generales') + '<table style="width:100%;border-collapse:collapse;">' + gen + '</table>' +
       sec('2. Actividades ejecutadas') + '<table style="width:100%;border-collapse:collapse;"><tr>' + ['Ítem', 'Actividad', 'Ejecutado', 'Unidad', 'Contractual PDT'].map(h => '<th style="background:#154270;color:#fff;padding:6px 8px;font-size:9.5px;text-align:left;">' + h + '</th>').join('') + '</tr>' + its + '</table>' +
-      (r.observaciones ? sec('Observaciones') + '<p style="font-size:10px;">' + escapeHtml(r.observaciones) + '</p>' : '') +
+      sec('Observaciones') + '<p style="font-size:10px;">' + escapeHtml(r.observaciones || 'Sin observaciones.') + '</p>' +
       sec('3. Registro fotográfico') + fotos + sec('4. Firma') + firma);
   }
   return '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Informe de registros de obra</title><style>body{font-family:Calibri,Arial,sans-serif;color:#16202b;}table{border-collapse:collapse;}</style></head><body>' + blocks.join('') + '</body></html>';
@@ -1135,20 +1181,21 @@ async function downloadBlob(blob, name) {
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
 }
 function fileBase(list) {
-  const comps = uniq(list.map(r => r.comp));
-  return safeName('Registros ' + (comps.length === 1 ? comps[0] : list.length + ' registros') + ' ' + isoToDMA(todayIso()).replace(/\//g, '-'));
+  if (list.length === 1) { const r = list[0]; return safeName('Registro ' + clienteOf(r) + ' ' + recHead(r) + ' ' + (isoToDMA(r.fecha) || '').replace(/\//g, '-') + ' ' + codeOf(r)); }
+  const cls = uniq(list.map(clienteOf));
+  return safeName('Registros ' + (cls.length === 1 ? cls[0] + ' ' : '') + list.length + ' registros ' + isoToDMA(todayIso()).replace(/\//g, '-'));
 }
 function renderExportSelector() {
   refreshFilterSelects();
-  const fz = $('expZona').value;
-  const list = visibleRecords().filter(r => !fz || r.zona === fz);
+  const fcl = $('expCliente').value, fz = $('expZona').value;
+  const list = visibleRecords().filter(r => (!fcl || clienteOf(r) === fcl) && (!fz || r.zona === fz));
   const cont = $('exportSelectorList');
   const prevChecked = new Set(Array.from(cont.querySelectorAll('input:checked')).map(i => +i.value));
   const first = !cont.dataset.init; cont.dataset.init = '1';
-  cont.innerHTML = list.length ? list.map(r => '<label class="sel-row"><input type="checkbox" value="' + r.id + '"' + (first || prevChecked.has(r.id) ? ' checked' : '') + '><span><b>' + escapeHtml(isoToDMA(r.fecha)) + '</b> · ' + escapeHtml(r.comp + ' · ' + r.predio) + '<br><span class="muted">' + escapeHtml(codeOf(r) + ' · ' + (r.registradoPor || 'Sin nombre') + ' · ' + r.zona + ' · ' + (r.items || []).length + ' actividad(es) · ' + fotosOf(r).length + ' fotos') + '</span></span></label>').join('')
+  cont.innerHTML = list.length ? list.map(r => '<label class="sel-row"><input type="checkbox" value="' + r.id + '"' + (first || prevChecked.has(r.id) ? ' checked' : '') + '><span><b>' + escapeHtml(isoToDMA(r.fecha)) + '</b> · ' + escapeHtml(clienteOf(r) + ' · ' + recHead(r)) + '<br><span class="muted">' + escapeHtml(codeOf(r) + ' · ' + (r.registradoPor || 'Sin nombre') + ' · ' + r.zona + ' · ' + (r.items || []).length + ' actividad(es) · ' + fotosOf(r).length + ' fotos') + '</span></span></label>').join('')
     : '<p class="muted">No hay registros para mostrar.</p>';
 }
-$('expZona').addEventListener('change', () => { $('exportSelectorList').dataset.init = ''; renderExportSelector(); });
+['expCliente', 'expZona'].forEach(id => $(id).addEventListener('change', () => { $('exportSelectorList').dataset.init = ''; renderExportSelector(); }));
 $('btnSelectAll').addEventListener('click', () => $('exportSelectorList').querySelectorAll('input').forEach(i => { i.checked = true; }));
 $('btnSelectNone').addEventListener('click', () => $('exportSelectorList').querySelectorAll('input').forEach(i => { i.checked = false; }));
 function selectedRecords() {
@@ -1222,8 +1269,8 @@ $('btnExportWord').addEventListener('click', async () => {
   catch (e) { failToast('el Word', e); }
 });
 $('btnExportJson').addEventListener('click', async () => {
-  const data = { app: 'RegistrObraApp', version: APP_VERSION, exportado: new Date().toISOString(), registros: STATE.registros };
-  await downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'RegistrObraApp copia ' + isoToDMA(todayIso()).replace(/\//g, '-') + '.json');
+  const data = { app: 'RegistrObraApp', nombre: APP_NAME, version: APP_VERSION, exportado: new Date().toISOString(), registros: STATE.registros };
+  await downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'Registro de Obra copia ' + isoToDMA(todayIso()).replace(/\//g, '-') + '.json');
   toast('Copia descargada');
 });
 async function readImport() {
@@ -1233,7 +1280,7 @@ async function readImport() {
     const d = JSON.parse(await f.text());
     if (!d || !Array.isArray(d.registros)) throw new Error('formato');
     return d.registros;
-  } catch (e) { toast('El archivo no es una copia válida de RegistrObraApp', true); return null; }
+  } catch (e) { toast('El archivo no es una copia válida de Registro de Obra', true); return null; }
 }
 async function importRecords(list, replace) {
   if (replace) await idbClear('registros');

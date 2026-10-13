@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>RegistrObraApp</title>
+<title>Registro de Obra</title>
 
 <!-- Instalación como app (Android "Agregar/Instalar" y iOS "Agregar a pantalla de inicio") -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0f2f52">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="RegistrObraApp">
+<meta name="apple-mobile-web-app-title" content="Registro de Obra">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
@@ -24,7 +24,7 @@
     <div class="brand">
       <img src="logo-bqs-header.png" alt="BQS · Business &amp; Quality Services SAS" class="brand-logo">
       <div>
-        <h1>RegistrObraApp</h1>
+        <h1>Registro de Obra</h1>
         <p>Compensación Ambiental &middot; Registro en campo</p>
       </div>
     </div>
@@ -76,11 +76,19 @@
     <form id="regForm" novalidate autocomplete="off">
       <div class="card">
         <h3>Identificación</h3>
-        <div class="proj-strip" id="projStrip">Proyecto: <b>elige una zona</b></div>
+        <div class="client-row">
+          <div class="field" style="flex:1;">
+            <label>Cliente <span class="req">*</span></label>
+            <select id="f_cliente"></select>
+            <div class="err-msg">Selecciona el cliente.</div>
+          </div>
+          <div class="client-logo" id="clientLogo"></div>
+        </div>
+        <div class="proj-strip" id="projStrip">Proyecto: <b>elige el cliente</b></div>
         <div class="row2">
           <div class="field">
-            <label>Zona <span class="req">*</span></label>
-            <select id="f_zona"></select>
+            <label>Zona / proyecto <span class="req">*</span></label>
+            <select id="f_zona" disabled></select>
             <div class="err-msg">Selecciona la zona.</div>
           </div>
           <div class="field">
@@ -89,7 +97,7 @@
             <div class="err-msg">Selecciona el ODS.</div>
           </div>
         </div>
-        <div class="field">
+        <div class="field" id="compField">
           <label>ID COMP <span class="req">*</span></label>
           <select id="f_comp" disabled></select>
           <div class="err-msg">Selecciona el ID COMP.</div>
@@ -119,9 +127,9 @@
           <div class="err-msg">Selecciona el acto administrativo.</div>
         </div>
         <div class="field">
-          <label>Registrado por <span class="req">*</span> <span class="hint">nombre de quien registra</span></label>
+          <label>Registrado por <span class="req">*</span> <span class="hint">nombre y apellido de quien registra</span></label>
           <input type="text" id="f_registrado" placeholder="Nombre y apellido" maxlength="60" autocomplete="name">
-          <div class="err-msg">Escribe tu nombre.</div>
+          <div class="err-msg">Escribe tu nombre y apellido.</div>
         </div>
         <div class="field">
           <label>Ejecutor</label>
@@ -142,7 +150,7 @@
 
       <div class="card">
         <h3>Actividades ejecutadas</h3>
-        <p style="font-size:12px;color:var(--ink-600);margin:-4px 0 12px;">Elige el ÍTEM trabajado (solo aparecen los programados en el PDT para el COMP y predio seleccionados) y digita la cantidad ejecutada.</p>
+        <p style="font-size:12px;color:var(--ink-600);margin:-4px 0 12px;">Elige el ÍTEM trabajado (solo aparecen los programados en el PDT para el cliente, zona y predio seleccionados) y digita la cantidad ejecutada.</p>
         <div id="itemsContainer"></div>
         <button type="button" class="btn btn-clay btn-sm" id="btnAddRow">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
@@ -152,8 +160,8 @@
 
       <div class="card">
         <div class="field" style="margin-bottom:0;">
-          <label>Observaciones <span class="hint">opcional</span></label>
-          <textarea id="f_obs" placeholder="Notas de campo, novedades, condiciones del sitio…"></textarea>
+          <label>Observaciones <span class="hint">quedan en el registro y en el PDF</span></label>
+          <textarea id="f_obs" rows="4" placeholder="Ej.: supervivencia de árboles, condiciones del predio, estado del aislamiento, novedades…"></textarea>
         </div>
       </div>
 
@@ -202,7 +210,8 @@
   <section class="view" id="view-registros">
     <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Registros guardados</h2>
     <div class="toolbar">
-      <input type="search" id="searchBox" placeholder="Buscar por COMP, predio, ítem…" style="flex:1;min-width:180px;">
+      <input type="search" id="searchBox" placeholder="Buscar por cliente, COMP, predio, ítem, nombre…" style="flex:1;min-width:180px;">
+      <select id="filterCliente"><option value="">Todos los clientes</option></select>
       <select id="filterZona"><option value="">Todas las zonas</option></select>
       <select id="filterComp"><option value="">Todos los COMP</option></select>
       <select id="filterMine"><option value="">De todos</option><option value="mios">Solo míos</option><option value="pend">Por subir</option></select>
@@ -214,14 +223,15 @@
   <section class="view" id="view-maestro">
     <h2 class="section-title"><span class="rings"><span></span><span></span><span></span></span> Maestro COMP</h2>
     <div class="card">
-      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">Cada ID COMP con sus líneas del PDT y el avance acumulado según los registros de todos los técnicos (ejecutado vs cantidad contractual).</p>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">Cada ID COMP (Cenit) o proyecto (Hocol, Ecopetrol) con sus líneas del PDT y el avance acumulado según los registros de todos los técnicos (ejecutado vs cantidad contractual).</p>
       <div class="kpi-row" id="maestroKpis"></div>
       <button type="button" class="btn btn-primary btn-sm" id="btnMaestroExcel">Descargar Excel MAESTRO COMP</button>
     </div>
     <div class="toolbar">
       <input type="search" id="compSearch" placeholder="Buscar ID COMP, municipio, predio…" style="flex:1;min-width:160px;">
+      <select id="maestroCliente"><option value="">Todos los clientes</option></select>
       <select id="maestroZona"><option value="">Todas las zonas</option></select>
-      <select id="maestroSolo"><option value="">Todos los COMP</option><option value="con">Solo con registros</option></select>
+      <select id="maestroSolo"><option value="">Todos</option><option value="con">Solo con registros</option></select>
     </div>
     <div id="compMasterList"></div>
     <div id="compMore" style="text-align:center;margin-top:10px;"></div>
@@ -248,6 +258,7 @@
     <div class="card">
       <h3>Seleccionar registros</h3>
       <div class="toolbar" style="margin-bottom:10px;">
+        <select id="expCliente"><option value="">Todos los clientes</option></select>
         <select id="expZona"><option value="">Todas las zonas</option></select>
         <button type="button" class="btn btn-ghost btn-sm" id="btnSelectAll">Seleccionar todos</button>
         <button type="button" class="btn btn-ghost btn-sm" id="btnSelectNone">Ninguno</button>
@@ -258,7 +269,7 @@
       <h3>Paquete completo (.zip)</h3>
       <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 10px;line-height:1.5;">
         Descarga los registros marcados con sus fotos, firmas e informe PDF, organizados en carpetas:<br>
-        <code style="font-size:11.5px;">REGISTROS EN CAMPO / Proyecto / ID COMP / Fecha_Predio / …</code><br>
+        <code style="font-size:11.5px;">REGISTROS EN CAMPO / Proyecto / ID COMP o zona / Fecha_Predio / …</code><br>
         Incluye el Excel MAESTRO COMP en la raíz y en cada carpeta de proyecto.
       </p>
       <label class="sel-row" style="margin-bottom:10px;"><input type="checkbox" id="zipPdf" checked> Incluir informe PDF de cada registro</label>
@@ -331,7 +342,7 @@
           <li>Toquen "Agregar" y listo</li>
         </ol>
       </div>
-      <p style="font-size:13.5px;line-height:1.55;margin:0 0 12px;">Les aparecerá el ícono de RegistrObraApp en el celular como cualquier otra app.</p>
+      <p style="font-size:13.5px;line-height:1.55;margin:0 0 12px;">Les aparecerá el ícono de Registro de Obra en el celular como cualquier otra app.</p>
       <div class="note"><b>Importante:</b> ábranla siempre desde ese ícono (no desde WhatsApp), y la primera vez háganlo con internet o datos activos para que quede guardada en el celular — después de esa primera vez ya funciona sin señal</div>
       <p style="font-size:13px;color:var(--ink-600);line-height:1.55;margin:0;">Este aplicativo no necesita internet para registrar: todos los registros, fotos y firmas se guardan primero en la memoria de este dispositivo y, cuando hay señal, se suben solos a la base compartida para que todos los vean. Si borras los datos del navegador antes de sincronizar, lo que estaba "por subir" se pierde.</p>
       <p class="muted" id="offlineReady" style="margin:12px 0 0;"></p>
@@ -341,7 +352,7 @@
 </main>
 
 <footer class="app-foot">
-  <b>RegistrObraApp</b> · Compensación Ambiental · Funciona sin conexión y sincroniza con internet · <span id="verTxt"></span>
+  <b>Registro de Obra</b> · BQS · Compensación Ambiental · Funciona sin conexión y sincroniza con internet · <span id="verTxt"></span>
 </footer>
 
 <div class="modal-bg" id="modalBg">
@@ -367,6 +378,7 @@
 <script src="jszip.min.js"></script>
 <script src="config.js"></script>
 <script src="logo-cenit.js"></script>
+<script src="logos-clientes.js"></script>
 <script src="pdt-data.js"></script>
 <script src="app.js"></script>
 </body>

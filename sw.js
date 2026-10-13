@@ -1,8 +1,8 @@
-/* Service worker de RegistrObraApp: guarda la app en el teléfono para usarla sin internet.
+/* Service worker de Registro de Obra: guarda la app en el teléfono para usarla sin internet.
    Con señal descarga siempre la versión más reciente; sin señal usa la copia guardada. */
-const CACHE_VERSION = 'registrobra-v3';
+const CACHE_VERSION = 'registrobra-v4';
 const FILES = [
-  './', './index.html', './styles.css', './app.js', './config.js', './pdt-data.js', './logo-cenit.js', './manifest.webmanifest',
+  './', './index.html', './styles.css', './app.js', './config.js', './pdt-data.js', './logo-cenit.js', './logos-clientes.js', './manifest.webmanifest',
   './exceljs.min.js', './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js', './jszip.min.js',
   './logo-bqs-header.png', './icon-32.png', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'
 ];
